@@ -14,6 +14,12 @@ import config
 import matplotlib.pyplot as plt
 
 
+# Check if the directory exists
+if not os.path.exists(config.path.EEG_features_directory):
+    # If it doesn't exist, create it
+    os.makedirs(config.path.EEG_features_directory)
+
+
 # Define a function to create a bandpass filter
 def butter_bandpass(lowcut, highcut, fs, order=4):
     nyq = 0.5 * fs
@@ -332,7 +338,7 @@ def combine_and_save_features_for_subjects(file_list, staging_file_list, output_
         
 
 # Get all CSV files that end with _eeg and _staging from the specified directory
-path = config.path.synced_csv_directory
+path = os.path.join(config.path.synced_csv_directory, '')  # os.path.join ensures there's a slash at the end
 
 # Get all files and sort them in reverse order
 eeg_files = sorted(glob.glob(path + '*_eeg.csv'))#[45:46] 

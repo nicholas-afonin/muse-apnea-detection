@@ -142,7 +142,8 @@ def compute_features_for_30s(df, df_label_time, threshold=0.0, cutoff_freq=0.5):
 def combine_features_from_files(file_list, staging_file_list, output_path, threshold=0.0):
     for file, staging_file in zip(file_list, staging_file_list):
 
-        output_file_name = os.path.join(output_path, f"{os.path.basename(file).replace('_acc.csv', '_features.csv')}")
+        output_file_name = os.path.join(output_path, f"{os.path.basename(file).replace('_acc.csv', '_acc_features.csv')}")
+
         # Check if the output file already exists
         if os.path.exists(output_file_name):
             print(f"Skipping {file.split('/')[-1]}: already processed.")
@@ -158,7 +159,7 @@ def combine_features_from_files(file_list, staging_file_list, output_path, thres
         features_30s = compute_features_for_30s(df, df_label_time, threshold)
 
         # Generate an output file name
-        output_file_name = os.path.join(output_path, f"{os.path.basename(file).replace('_acc.csv', '_features.csv')}")
+        output_file_name = os.path.join(output_path, f"{os.path.basename(file).replace('_acc.csv', '_acc_features.csv')}")
         
         # Save features to CSV
         features_30s.to_csv(output_file_name, index=False)
@@ -166,7 +167,7 @@ def combine_features_from_files(file_list, staging_file_list, output_path, thres
 
 # Get all CSV files that end with _acc and _staging from the specified directory
 # Specify the path
-path = config.path.synced_csv_directory
+path = os.path.join(config.path.synced_csv_directory, '')
 
 # Get all CSV files that end with _acc and _staging
 acc_files = sorted(glob.glob(path + '*_acc.csv'))#, reverse=True)
