@@ -1,0 +1,6 @@
+pandas~=2.2.3
+numpy~=2.2.5
+scipy~=1.15.3
+antropy~=0.1.9
+matplotlib~=3.10.3
+yasa~=0.6.5
