@@ -8,6 +8,6 @@
 #SBATCH --error=/scratch/a/alim/afoninni/muse/muse_preprocessing.err
 
 
-source /home/a/alim/afoninni/.virtualenvs/myenv/bin/activate
-cd /home/a/alim/afoninni/anne-apnea-detection || exit
-python sequential_model_anne_preprocessing.py
+source /home/a/alim/afoninni/.virtualenvs/env2/bin/activate
+cd /home/a/alim/afoninni/anne-apnea-detection/preprocessing || exit
+python sync_all_files_April_2025.py
