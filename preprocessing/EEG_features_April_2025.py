@@ -13,6 +13,11 @@ import warnings; warnings.simplefilter('ignore')
 import config
 import matplotlib.pyplot as plt
 
+"""
+Note this outputs files to the folder the input files came from no matter how hard I try.
+Might not even be a real issue but i'm leaving this note in case it comes up later.
+"""
+
 
 # Check if the directory exists
 if not os.path.exists(config.path.EEG_features_directory):

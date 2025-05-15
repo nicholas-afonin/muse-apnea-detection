@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=muse_preprocessing
-#SBATCH --time=20:00:00
+#SBATCH --time=1:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=40
@@ -10,4 +10,4 @@
 
 source /home/a/alim/afoninni/.virtualenvs/env2/bin/activate
 cd /home/a/alim/afoninni/muse-apnea-detection/preprocessing || exit
-python sync_all_files_April_2025.py
+python combine_features.py
