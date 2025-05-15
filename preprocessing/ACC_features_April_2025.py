@@ -2,6 +2,7 @@ import pandas as pd
 import glob
 import numpy as np
 import os
+import config
 from scipy import signal
 from scipy.fft import fft
 
@@ -165,7 +166,7 @@ def combine_features_from_files(file_list, staging_file_list, output_path, thres
 
 # Get all CSV files that end with _acc and _staging from the specified directory
 # Specify the path
-path = '/scratch/afoninni/Muse_synced_csv_25_April_2025/'
+path = config.path.synced_csv_directory
 
 # Get all CSV files that end with _acc and _staging
 acc_files = sorted(glob.glob(path + '*_acc.csv'))#, reverse=True)
@@ -181,7 +182,7 @@ if len(acc_files) != len(staging_files) or acc_prefixes != staging_prefixes:
     raise ValueError("Mismatch in the number of _acc and _staging files or their prefixes")
 
 # Define output path
-output_path = '/home/afoninni/scratch/ACC_features_April2025/'
+output_path = config.path.ACC_features_directory
 
 # Create the output directory if it doesn't exist
 os.makedirs(output_path, exist_ok=True)

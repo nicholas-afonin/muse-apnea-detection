@@ -10,6 +10,7 @@ from scipy import integrate
 import antropy as ant
 import scipy.stats as sp_stats
 import warnings; warnings.simplefilter('ignore')
+import config
 import matplotlib.pyplot as plt
 
 
@@ -330,8 +331,8 @@ def combine_and_save_features_for_subjects(file_list, staging_file_list, output_
         save_features_for_subject(features_30s, subject_name, output_folder)
         
 
-# Get all CSV files that end with _acc and _staging from the specified directory
-path = '/scratch/dgurve/Muse_synced_csv_25_April_2025/'
+# Get all CSV files that end with _eeg and _staging from the specified directory
+path = config.path.synced_csv_directory
 
 # Get all files and sort them in reverse order
 eeg_files = sorted(glob.glob(path + '*_eeg.csv'))#[45:46] 
@@ -357,5 +358,5 @@ if len(eeg_files) != len(staging_files) or eeg_prefixes != staging_prefixes:
     raise ValueError("Mismatch in number of _eeg and _staging files or their prefixes")
 
 # Usage example:
-output_folder = '/home/dgurve/scratch/EEG_features_April2025/'
+output_folder = config.path.EEG_features_directory
 combine_and_save_features_for_subjects(eeg_files, staging_files, output_folder)
