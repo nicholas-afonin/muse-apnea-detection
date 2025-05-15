@@ -9,5 +9,5 @@
 
 
 source /home/a/alim/afoninni/.virtualenvs/env2/bin/activate
-cd /home/a/alim/afoninni/muse-apnea-detection || exit
-python preprocessing/sync_all_files_April_2025.py
+cd /home/a/alim/afoninni/muse-apnea-detection/preprocessing || exit
+python sync_all_files_April_2025.py
