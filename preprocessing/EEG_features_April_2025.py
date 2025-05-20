@@ -1,8 +1,7 @@
 import os
-import shutil
 import pandas as pd
 import numpy as np
-from scipy.signal import welch, butter, lfilter, filtfilt
+from scipy.signal import welch, butter, filtfilt
 from scipy.stats import entropy
 import glob
 from yasa import sw_detect, spindles_detect
@@ -11,7 +10,6 @@ import antropy as ant
 import scipy.stats as sp_stats
 import warnings; warnings.simplefilter('ignore')
 import config
-import matplotlib.pyplot as plt
 
 """
 Note this outputs files to the folder the input files came from no matter how hard I try.

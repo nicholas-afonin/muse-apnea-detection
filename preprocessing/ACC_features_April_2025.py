@@ -3,7 +3,6 @@ import glob
 import numpy as np
 import os
 import config
-from scipy import signal
 from scipy.fft import fft
 
 

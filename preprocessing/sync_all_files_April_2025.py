@@ -1,8 +1,6 @@
 import os
 import pandas as pd
 import config
-from datetime import datetime
-
 
 raw_csv_directory = config.path.raw_csv_directory  # Directory where your raw CSV files are located
 synced_csv_directory = config.path.synced_csv_directory  # Directory where you want to save the filtered CSV files
