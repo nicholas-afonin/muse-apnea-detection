@@ -12,9 +12,10 @@ import pandas as pd
 APNEA_EPOCH_THRESHOLD = 0.01
 
 
-def path_to_file(ACC_path, EEG_path, events_path):
-    """This file basically only used when you're trying to combine ACC and EEG features along with
-    events like apneas"""
+def check_files(ACC_path, EEG_path, events_path):
+    """This func basically only used when you're trying to combine ACC and EEG features along with
+    events like apneas. Checks to ensure the shapes of all the directories you're combining match,
+    and simply returns the strings denoting those directories if yes"""
 
     # Get all CSV files with ACC features, EEG features, and events
     acc_files = sorted(glob.glob(ACC_path + '*_acc_features.csv'))  # , reverse=True)
@@ -93,42 +94,36 @@ def label_apnea_events(df_features, df_events, window_length=30, min_overlap_fra
     return df_features
 
 
-
-def combine_features_and_label(ACC_feature_files, EEG_feature_files, event_label_files, output_directory):
-    for acc_file, eeg_file, event_file in zip(ACC_feature_files, EEG_feature_files, event_label_files):
+def combine_features(ACC_feature_files, EEG_feature_files, output_directory):
+    for acc_file, eeg_file in zip(ACC_feature_files, EEG_feature_files):
         # Initialize all data for recording
         df_acc = pd.read_csv(acc_file)
         df_eeg = pd.read_csv(eeg_file)
-        df_events = pd.read_csv(event_file)
 
-        df_acc = df_acc.drop(columns=['name', 'ts'])  # drop sleep stage and time column, since eeg has one already
-                                                      # and they line up
+        # drop sleep stage and time column (which already exist in EEG files)
+        df_acc = df_acc.drop(columns=['name', 'ts'])
 
-        print(f"Now processing > {acc_file.split('/')[-1]}: {len(df_acc)} rows, with {len(df_events)} events")
+        print(f"Now combining > {acc_file.split('/')[-1]}: {len(df_acc)} rows")
 
         # Combine acc and eeg features
         df_acc_eeg = pd.concat([df_acc, df_eeg], axis=1)
 
-        # Filter out wake rows
-        df_acc_eeg = remove_wake_rows(df_acc_eeg)
-
-        # Add columns labelling apnea events (or other events)
-        df_acc_eeg = label_apnea_events(df_acc_eeg, df_events)
-
-        # save file to output location
+        # Save output
         filename = os.path.basename(acc_file).replace('_synced_acc_features.csv',
-                                               '_synced_labelled_features.csv')
+                                                      '_synced_combined_features.csv')
         full_out = os.path.join(output_directory, filename)
         df_acc_eeg.to_csv(full_out, index=False)
 
 
-def just_label(ACC_EEG_feature_files, event_label_files, output_directory):
+def process_features(ACC_EEG_feature_files, event_label_files, output_directory):
     for acc_eeg_file, event_file in zip(ACC_EEG_feature_files, event_label_files):
         # Initialize all data for recording
         df_acc_eeg = pd.read_csv(acc_eeg_file)
         df_events = pd.read_csv(event_file)
 
-        df_acc_eeg = df_acc_eeg.drop(columns=['name_y'])  # drop extra sleep stage column
+        # drop extra or unneeded rows (dependent on the ACC_EEG_feature_files)
+        # if generated using the function in this file, nothing needs to be removed
+        # df_acc_eeg = df_acc_eeg.drop(columns=['name_y'])
 
         print(f"Now processing > {acc_eeg_file.split('/')[-1]}: {len(df_acc_eeg)} rows, with {len(df_events)} events")
 
@@ -151,14 +146,13 @@ if __name__ == '__main__':
         # If it doesn't exist, create it
         os.makedirs(config.path.EEG_ACC_features_labelled)
 
-    """OPTION 1"""
-    # If you have separate feature files, and want to combine and label them
-    # acc_files, eeg_files, event_files, prefixes = path_to_file(config.path.ACC_features_directory, config.path.EEG_features_directory, config.path.raw_csv_directory)
-    # combine_features_and_label(acc_files, eeg_files, event_files, config.path.EEG_ACC_features_labelled)
+    """OPTION 1 - combine and then process features"""
+    # acc_files, eeg_files, event_files, prefixes = check_files(config.path.ACC_features_directory, config.path.EEG_features_directory, config.path.raw_csv_directory)
+    # combine_features(acc_files, eeg_files, config.path.EEG_ACC_features)
+    # process_features(config.path.EEG_ACC_features, config.path.raw_csv_directory, config.path.EEG_ACC_features_labelled)
 
-    """OPTION 2"""
-    # If you already have a combined feature file, and just want to label it
+    """OPTION 2 - only process already combined features"""
     eeg_acc_files = sorted(glob.glob(config.path.EEG_ACC_features + '*_synced_features.csv'))  # , reverse=True)
     event_files = sorted(glob.glob(config.path.raw_csv_directory + '*_events.csv'))  # , reverse=True)
 
-    just_label(eeg_acc_files, event_files, config.path.EEG_ACC_features_labelled)
+    process_features(eeg_acc_files, event_files, config.path.EEG_ACC_features_labelled)
