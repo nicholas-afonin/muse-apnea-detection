@@ -10,4 +10,4 @@
 
 source /home/a/alim/afoninni/.virtualenvs/env2/bin/activate
 cd /home/a/alim/afoninni/muse-apnea-detection/preprocessing || exit
-python combine_features.py
+python combine_and_label_features.py

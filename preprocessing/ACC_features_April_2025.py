@@ -1,3 +1,9 @@
+"""
+Handle accelerometer and EEG feature extraction from synced MUSE sensor data. Can select window size and
+stride distance if a sliding window (overlapping windows) is preferred.
+Currently, sliding windows are not implemented.
+"""
+
 import pandas as pd
 import glob
 import numpy as np
@@ -6,7 +12,7 @@ import config
 from scipy.fft import fft
 
 
-def compute_features_for_30s(df, df_label_time, threshold=0.0, cutoff_freq=0.5):
+def compute_features(df, df_label_time, threshold=0.0, cutoff_freq=0.5, window_size=30):
     # Check if required columns are present in the input dataframe
     required_columns = ['ts', 'ch1', 'ch2', 'ch3']
     for col in required_columns:
@@ -24,7 +30,7 @@ def compute_features_for_30s(df, df_label_time, threshold=0.0, cutoff_freq=0.5):
     names = df_label_time['name'].tolist()
 
     for i in range(len(start_times) - 1):
-        chunk = df[(df['ts'] >= start_times[i]) & (df['ts'] < start_times[i + 1])]
+        chunk = df[(df['ts'] >= start_times[i]) & (df['ts'] < (start_times[i] + window_size))]
 
         # Check if the chunk is empty
         if chunk.empty:
@@ -138,9 +144,38 @@ def compute_features_for_30s(df, df_label_time, threshold=0.0, cutoff_freq=0.5):
 
     return features_df
 
-def combine_features_from_files(file_list, staging_file_list, output_path, threshold=0.0):
-    for file, staging_file in zip(file_list, staging_file_list):
 
+def resample_sleep_staging(df, new_window_size, stride):
+    """
+    Currently the feature extraction is based on the time windows provided by each
+    _staging2.csv file, which has 30 second time windows. This function simply resamples it
+    to whatever desired window size, keeping the sleep labels assigned at any given point in time.
+
+    Recall that the times in the "starts" column refer to the start of the sleep windows.
+    This function ensures that the final "start time" plus the window size does not exceed the range of the data
+    """
+
+    if stride is None:  # no sliding window
+        # Add a time column in datetime format for better processing and set it as the index
+        df['datetime'] = pd.to_datetime(df['start'], unit='s')
+        df = df.set_index('datetime')
+
+        # Use built in resampling method
+        new_window_size = str(new_window_size) + "s"
+        df_resampled = df.resample(new_window_size).ffill()
+
+        # Convert back to original format for consistency
+        df_resampled['start'] = df_resampled.index.astype('int64') // 10 ** 9
+        df_resampled = df_resampled.reset_index(drop=True)
+        df_resampled['name'] = df_resampled['name'].fillna(0).astype(int)
+
+        return df_resampled
+    else:
+        raise Exception("Does not currently support sliding windows. Slide must be -1")
+
+
+def combine_acc_features_from_files(file_list, staging_file_list, output_path, threshold=0.0, window_size=30, stride=None):
+    for file, staging_file in zip(file_list, staging_file_list):
         output_file_name = os.path.join(output_path, f"{os.path.basename(file).replace('_acc.csv', '_acc_features.csv')}")
 
         # Check if the output file already exists
@@ -153,39 +188,55 @@ def combine_features_from_files(file_list, staging_file_list, output_path, thres
 
         # Print the length of each _acc file
         print(f"Now processing > {file.split('/')[-1]}: {len(df)} rows")
-        
+
+        # Resample staging df to appropriate time windows as requested (extraction is based on it)
+        df_label_time = resample_sleep_staging(df_label_time, new_window_size=window_size, stride=stride)
+
         # Compute features for chunks based on start times from df_label_time
-        features_30s = compute_features_for_30s(df, df_label_time, threshold)
+        features = compute_features(df, df_label_time, threshold)
 
         # Generate an output file name
         output_file_name = os.path.join(output_path, f"{os.path.basename(file).replace('_acc.csv', '_acc_features.csv')}")
         
         # Save features to CSV
-        features_30s.to_csv(output_file_name, index=False)
+        features.to_csv(output_file_name, index=False)
         print(f"Saved features to: {output_file_name}")
 
-# Get all CSV files that end with _acc and _staging from the specified directory
-# Specify the path
-path = os.path.join(config.path.synced_csv_directory, '')
 
-# Get all CSV files that end with _acc and _staging
-acc_files = sorted(glob.glob(path + '*_acc.csv'))#, reverse=True)
-staging_files = sorted(glob.glob(path + '*_staging2.csv'))#, reverse=True)
-print(staging_files)
+def extract_acc_features(source_files_path, output_path, window_size=30, stride=None):
+    """
+    Note window size must always be a factor or multiple of 30, otherwise sleep stages shown in
+    extracted features may be inaccurate.
 
-# Extract prefixes
-acc_prefixes = [file.split('_acc.csv')[0] for file in acc_files]
-staging_prefixes = [file.split('_staging2.csv')[0] for file in staging_files]
+    :param source_files_path: path to directory containing synced _acc, _eeg, _ppg, and _staging2 .csv files
+    :param output_path: directory where output folder (with extracted features) will be created and saved
+    :param window_size: determines the size of the window used to compute features
+    :param stride: for overlapping/sliding windows, determines the offset between each sliding window
+    """
+    # Get all CSV files that end with _acc and _staging from the specified directory
+    path = os.path.join(source_files_path, '')
+    acc_files = sorted(glob.glob(path + '*_acc.csv'))
+    staging_files = sorted(glob.glob(path + '*_staging2.csv'))
 
-# Ensure that for each _acc file there's a corresponding _staging file
-if len(acc_files) != len(staging_files) or acc_prefixes != staging_prefixes:
-    raise ValueError("Mismatch in the number of _acc and _staging files or their prefixes")
+    # Extract file prefixes, confirm that they all match up, and define the output directory
+    acc_prefixes = [file.split('_acc.csv')[0] for file in acc_files]
+    staging_prefixes = [file.split('_staging2.csv')[0] for file in staging_files]
 
-# Define output path
-output_path = config.path.ACC_features_directory
+    if len(acc_files) != len(staging_files) or acc_prefixes != staging_prefixes:
+        raise ValueError("Mismatch in the number of _acc and _staging files or their prefixes")
 
-# Create the output directory if it doesn't exist
-os.makedirs(output_path, exist_ok=True)
+    stride_string = "NA" if stride is None else stride  #
+    output_path = output_path + "ACC_features_window" + str(window_size) + "_stride" + str(stride_string) + "/"
+    os.makedirs(output_path, exist_ok=True)
 
-# Combine features from all files and save them individually
-combine_features_from_files(acc_files, staging_files, output_path, threshold=0.0)
+    # Compute and combine features from all files and save them individually
+    print("Extracting features from " + source_files_path + "\nWindow size: " + str(window_size) + "\nStride: " + str(stride) + "\n --- ")
+    combine_acc_features_from_files(acc_files, staging_files, output_path, threshold=0.0, window_size=window_size, stride=stride)
+
+
+if __name__ == '__main__':
+    extract_acc_features(config.path.synced_csv_directory, config.path.ACC_features_directory, window_size=30, stride=None)
+    extract_acc_features(config.path.synced_csv_directory, config.path.ACC_features_directory, window_size=15, stride=None)
+    extract_acc_features(config.path.synced_csv_directory, config.path.ACC_features_directory, window_size=10, stride=None)
+    extract_acc_features(config.path.synced_csv_directory, config.path.ACC_features_directory, window_size=5, stride=None)
+    extract_acc_features(config.path.synced_csv_directory, config.path.ACC_features_directory, window_size=1, stride=None)

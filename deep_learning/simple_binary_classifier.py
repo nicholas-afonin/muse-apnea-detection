@@ -10,11 +10,9 @@ from keras.layers import Dense, Dropout, BatchNormalization
 from keras.regularizers import l2
 from keras.callbacks import EarlyStopping
 from keras.metrics import Precision
-# from tensorflow.python.keras.models import Sequential, load_model
-# from tensorflow.python.keras.layers import Dense
 from sklearn.model_selection import train_test_split
 import tensorflow as tf
-from sklearn.metrics import confusion_matrix,ConfusionMatrixDisplay
+from sklearn.metrics import confusion_matrix,ConfusionMatrixDisplay, f1_score
 from sklearn.metrics import classification_report, roc_auc_score, matthews_corrcoef
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.utils import class_weight
@@ -70,17 +68,19 @@ def load_data(processed_features_directory, train_test_ratio):
     y_train = X_train.pop('apnea_event')
     y_test = X_test.pop('apnea_event')
 
-    # You already have X_train, y_train
-    X_train, X_val, y_train, y_val = train_test_split(
-        X_train, y_train,
-        test_size=0.15,
-        stratify=y_train,
-        random_state=42
-    )
+    # Create stratified train/validation split
+    # X_train, X_val, y_train, y_val = train_test_split(
+    #     X_train, y_train,
+    #     test_size=0.15,
+    #     stratify=y_train,
+    #     random_state=43
+    # )
+    X_val = X_test  # Validation set NOT USED currently
+    y_val = y_test
 
     # Oversample the minority classes in the training data to give more to train on
-    smote = SMOTE()
-    X_train, y_train = smote.fit_resample(X_train, y_train)
+    # smote = SMOTE()
+    # X_train, y_train = smote.fit_resample(X_train, y_train)
 
     # Debugging
     # print("Unique labels in y_train:", y_train.unique())
@@ -96,19 +96,19 @@ def load_data(processed_features_directory, train_test_ratio):
 def train_model(X_train, y_train, X_val, y_val):
     # Create model architecture
     basic_model = Sequential()  # initialize a basic sequential model
-    basic_model.add(Dense(units=128, activation='relu', input_shape=(167,), kernel_regularizer=l2(0.01)))  # input layer
+    basic_model.add(Dense(units=128, activation='relu', input_shape=(167,), kernel_regularizer=l2(0.001)))  # input layer
     basic_model.add(Dropout(0.4))  # to prevent overfitting
-    basic_model.add(Dense(64, activation='tanh', kernel_regularizer=l2(0.01)))
+    basic_model.add(Dense(64, activation='tanh', kernel_regularizer=l2(0.001)))
     basic_model.add(Dropout(0.4))
     basic_model.add(Dense(32, activation='relu', kernel_regularizer=l2(0.001)))
     basic_model.add(Dropout(0.4))
     basic_model.add(Dense(1, activation='sigmoid'))
 
     adam = keras.optimizers.Adam(learning_rate=0.00005)
-    basic_model.compile(loss='binary_crossentropy', optimizer=adam, metrics=["accuracy", keras.metrics.Precision()])
+    basic_model.compile(loss='binary_crossentropy', optimizer=adam)
 
     # Add early stopping to prevent wasting time without validation improvements
-    early_stop = EarlyStopping(monitor='val_loss', patience=30, restore_best_weights=True)
+    early_stop = EarlyStopping(monitor='val_loss', patience=15, restore_best_weights=True)
 
     # Tell the loss function to weigh the minority cases much more heavily
     weights = class_weight.compute_class_weight(
@@ -121,7 +121,7 @@ def train_model(X_train, y_train, X_val, y_val):
     # Train model
     history = basic_model.fit(
         X_train, y_train,
-        epochs=300,
+        epochs=100,
         validation_data=(X_val, y_val),
         verbose=1,
         callbacks=[early_stop],
@@ -135,8 +135,7 @@ def evaluate_model(model, history, X_test, y_test):
     # Basic evaluation
     loss_and_metrics = model.evaluate(X_test, y_test)
     print(loss_and_metrics)
-    print('Loss = ', loss_and_metrics[0])
-    print('Accuracy = ', loss_and_metrics[1])
+    print('Loss = ', loss_and_metrics)
 
     # Plot training & validation loss
     plt.plot(history.history['loss'], label='Training Loss')
@@ -151,28 +150,81 @@ def evaluate_model(model, history, X_test, y_test):
     # Get predictions, performance metrics, and confusion matrix
     predicted_probabilities = model.predict(X_test)
     predicted_probabilities = tf.squeeze(predicted_probabilities)
-    predicted = np.array([1 if x >= 0.2 else 0 for x in predicted_probabilities])  # arbitrary threshold
     actual = np.array(y_test)
+
+    # Identify optimal threshold to use
+    # best_f1, best_thresh = 0, 0
+    # for t in np.linspace(0.1, 0.9, 50):
+    #     pred = tf.cast(predicted_probabilities > t, tf.int32)
+    #     score = f1_score(actual, pred)
+    #     if score > best_f1:
+    #         best_f1, best_thresh = score, t
+    #
+    # print("Best Thresh:", best_thresh)
+    # print("Best F1 Score:", best_f1)
+
+    best_thresh = 0.42
+    predicted = np.array([1 if x >= best_thresh else 0 for x in predicted_probabilities])  # arbitrary threshold
 
     print(classification_report(actual, predicted))  # includes precision, recall, F1
     print("AUC-ROC:", roc_auc_score(actual, predicted_probabilities))
     print("MCC:", matthews_corrcoef(actual, predicted))
 
-    conf_mat = confusion_matrix(actual, predicted)
+    # conf_mat = confusion_matrix(actual, predicted, normalize='true')
+    # labels = ["No Apnea", "Apnea"]
+    #
+    # disp = ConfusionMatrixDisplay(confusion_matrix=conf_mat, display_labels=labels)
+    # disp.plot()
+    #
+    # plt.title("Confusion Matrix")
+    # plt.xlabel("Predicted Label")
+    # plt.ylabel("True Label")
+    # plt.ioff()
+    # plt.show()
+
+    # Compute raw confusion matrix and normalized one (row-wise)
+    conf_mat_raw = confusion_matrix(actual, predicted)
+    conf_mat_norm = confusion_matrix(actual, predicted, normalize='true')  # normalize by row
+
     labels = ["No Apnea", "Apnea"]
+    n_classes = len(labels)
 
-    disp = ConfusionMatrixDisplay(confusion_matrix=conf_mat, display_labels=labels)
-    disp.plot()
+    # Set up figure
+    fig, ax = plt.subplots()
+    im = ax.imshow(conf_mat_norm, interpolation='nearest', cmap='Blues')
+    ax.figure.colorbar(im, ax=ax)
 
-    plt.title("Confusion Matrix")
-    plt.xlabel("Predicted Label")
-    plt.ylabel("True Label")
+    # Set ticks and labels
+    ax.set(xticks=np.arange(n_classes),
+           yticks=np.arange(n_classes),
+           xticklabels=labels,
+           yticklabels=labels,
+           ylabel='Ground Truth',
+           xlabel='Predicted',
+           title='')
+
+    # Rotate the tick labels and set alignment
+    plt.setp(ax.get_xticklabels(), rotation=45, ha="right", rotation_mode="anchor")
+
+    # Annotate each cell with count and percentage
+    fmt = '.1f'
+    thresh = conf_mat_norm.max() / 2.
+
+    for i in range(n_classes):
+        for j in range(n_classes):
+            count = conf_mat_raw[i, j]
+            percent = conf_mat_norm[i, j] * 100
+            ax.text(j, i, f"{count}\n({percent:.1f}%)",
+                    ha="center", va="center",
+                    color="white" if conf_mat_norm[i, j] > thresh else "black")
+
+    fig.tight_layout()
     plt.ioff()
     plt.show()
 
 
 if __name__ == "__main__":
     X_train, X_val, X_test, y_train, y_val, y_test = load_data(config.path.EEG_ACC_features_labelled, 0.75)
-    model, history = train_model(X_train, y_train, X_val, y_val)
+    model, history = train_model(X_train, y_train, X_test, y_test)
     evaluate_model(model, history, X_test, y_test)
 
