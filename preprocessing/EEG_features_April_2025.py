@@ -12,6 +12,14 @@ import config
 import os
 
 
+"""
+NOTE
+Currently only detects sleep spindles and slow waves for 30s windows. Anything less doesn't work due to
+the way YASA does the calculation. Ask Nick for more details.
+"""
+
+
+
 # Define a function to create a bandpass filter
 def butter_bandpass(lowcut, highcut, fs, order=4):
     nyq = 0.5 * fs
@@ -131,19 +139,16 @@ def  compute_psd_features_for_channel(data, sampling_rate=256):
     kurt = sp_stats.kurtosis(data)
 
     sampling_rate = 256
-    sp = spindles_detect(data, sampling_rate, verbose="critical")
-    # Check if sw is empty or NaN
-    if sp is None :
-        sp_count = 0
-    else:
-        sp_count = len(sp.summary())
 
-    sw = sw_detect(data, sampling_rate, verbose="critical")
-    # Check if sw is empty or NaN
-    if sw is None :
+    min_len = 30 * sampling_rate  # 30-s ⇒ 7680 samples @256 Hz
+    if len(data) < min_len:  # TEMPORARY FIX JUST SETS SW AND SP COUNTS TO 0 IF WINDOW SIZE WOULD CAUSE AN ERROR
+        sp_count = 0
         sw_count = 0
     else:
-        sw_count = len(sw.summary())
+        sp = spindles_detect(data, sampling_rate, verbose="critical")
+        sp_count = 0 if sp is None else len(sp.summary())
+        sw = sw_detect(data, sampling_rate, verbose="critical")
+        sw_count = 0 if sw is None else len(sw.summary())
 
 
     return {
