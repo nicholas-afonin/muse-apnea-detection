@@ -9,9 +9,6 @@ import glob
 import pandas as pd
 
 
-APNEA_EPOCH_THRESHOLD = 0.01
-
-
 def check_files(ACC_path, EEG_path, events_path):
     """This func basically only used when you're trying to combine ACC and EEG features along with
     events like apneas. Checks to ensure the shapes of all the directories you're combining match,
@@ -44,7 +41,7 @@ def remove_wake_rows(df):
     return df
 
 
-def label_apnea_events(df_features, df_events, window_length=30, min_overlap_fraction = APNEA_EPOCH_THRESHOLD):
+def label_apnea_events(df_features, df_events, min_overlap_fraction, window_length=30):
     """
     Labels each row in the features table according to the events file (ex. apnea or no apnea)
     """
@@ -115,8 +112,8 @@ def combine_features(ACC_feature_files, EEG_feature_files, output_directory):
         df_acc_eeg.to_csv(full_out, index=False)
 
 
-def process_features(ACC_EEG_feature_files, event_label_files, output_directory, apnea_epoch_threshold):
-    output_directory = output_directory + 'EEG_ACC_features_labelled_ApneaThreshold' + str(apnea_epoch_threshold) + '/'
+def process_features(ACC_EEG_feature_files, event_label_files, output_directory, apnea_epoch_threshold, window_length=30):
+    output_directory = output_directory + 'EEG_ACC_features_labelled_ApneaThreshold' + str(apnea_epoch_threshold) + '_window' + str(window_length) + '/'
     os.makedirs(output_directory, exist_ok=True)
 
     for acc_eeg_file, event_file in zip(ACC_EEG_feature_files, event_label_files):

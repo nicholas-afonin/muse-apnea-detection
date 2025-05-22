@@ -10,4 +10,5 @@
 
 source /home/a/alim/afoninni/.virtualenvs/env2/bin/activate
 cd /home/a/alim/afoninni/muse-apnea-detection/preprocessing || exit
-python combine_and_label_features.py
+python ACC_features_April_2025.py
+python EEG_features_April_2025.py

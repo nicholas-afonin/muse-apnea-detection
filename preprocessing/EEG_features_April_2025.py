@@ -1,4 +1,3 @@
-import os
 import pandas as pd
 import numpy as np
 from scipy.signal import welch, butter, filtfilt
@@ -11,11 +10,6 @@ import scipy.stats as sp_stats
 import warnings; warnings.simplefilter('ignore')
 import config
 import os
-
-"""
-Note this outputs files to the folder the input files came from no matter how hard I try.
-Might not even be a real issue but i'm leaving this note in case it comes up later.
-"""
 
 
 # Define a function to create a bandpass filter
@@ -416,7 +410,7 @@ def extract_eeg_features(source_files_path, output_path, window_size=30, stride=
 
 if __name__ == "__main__":
     extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=30, stride=None)
-    extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=15, stride=None)
-    extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=10, stride=None)
-    extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=5, stride=None)
-    extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=1, stride=None)
+    # extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=15, stride=None)
+    # extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=10, stride=None)
+    # extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=5, stride=None)
+    # extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=1, stride=None)
