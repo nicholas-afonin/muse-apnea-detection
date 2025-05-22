@@ -236,7 +236,7 @@ def extract_acc_features(source_files_path, output_path, window_size=30, stride=
 
 if __name__ == '__main__':
     extract_acc_features(config.path.synced_csv_directory, config.path.ACC_features_directory, window_size=30, stride=None)
-    # extract_acc_features(config.path.synced_csv_directory, config.path.ACC_features_directory, window_size=15, stride=None)
+    extract_acc_features(config.path.synced_csv_directory, config.path.ACC_features_directory, window_size=15, stride=None)
     # extract_acc_features(config.path.synced_csv_directory, config.path.ACC_features_directory, window_size=10, stride=None)
     # extract_acc_features(config.path.synced_csv_directory, config.path.ACC_features_directory, window_size=5, stride=None)
     # extract_acc_features(config.path.synced_csv_directory, config.path.ACC_features_directory, window_size=1, stride=None)

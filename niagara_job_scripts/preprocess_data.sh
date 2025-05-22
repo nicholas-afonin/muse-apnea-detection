@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=muse_preprocessing
-#SBATCH --time=1:00:00
+#SBATCH --time=24:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=40
@@ -11,7 +11,8 @@
 source /home/a/alim/afoninni/.virtualenvs/env2/bin/activate
 cd /home/a/alim/afoninni/muse-apnea-detection/preprocessing || exit
 
-export NUMBA_CACHE_DIR=/scratch/a/alim/afoninni/tmp
+export NUMBA_CACHE_DIR=/scratch/a/alim/afoninni/tmp  # fixes an error caused by a sub-dependency (numba)
 
+python sync_all_files_April_2025.py
 python ACC_features_April_2025.py
 python EEG_features_April_2025.py
