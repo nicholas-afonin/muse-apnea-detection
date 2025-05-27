@@ -12,6 +12,7 @@ import warnings; warnings.simplefilter('ignore')
 import config
 import os
 import math
+import warnings
 
 
 """
@@ -145,9 +146,7 @@ def compute_psd_features_for_channel(data, sp_sw_data, sampling_rate=256):
     if len(sp_sw_data) < min_len:
         sp_count = 0
         sw_count = 0
-        raise Exception("SP_SW_WINDOW IS SHORTER THAN 30S, CANNOT COMPUTE SP_COUNT or SW_COUNT FEATURES")
-        # theoretically can just comment this raise error out and move on with life if sp_count and sw_count are deemed
-        # unimportant
+        warnings.warn("SP_SW_WINDOW IS SHORTER THAN 30S, CANNOT COMPUTE SP_COUNT OR SW_COUNT FEATURES")
     else:
         sp = spindles_detect(sp_sw_data, sampling_rate, verbose="critical")
         sp_count = 0 if sp is None else len(sp.summary())
@@ -236,10 +235,12 @@ def ceildiv(a, b):
 
 
 def obtain_sw_sp_compatible_chunks(df, start_time, window_size, sampling_rate=256):
-    # Yasa's sw and sp detection require data chunks of AT LEAST 30 seconds duration (see logic below, sometimes could
-    # be a second or two longer)
-    # This function calculates chunks that have the same middle timestamp as the properly windowed chunks, but
-    # have durations of 30 seconds.
+    """
+    Yasa's sw and sp detection require data chunks of AT LEAST 30 seconds duration (see logic below, sometimes could
+    be a second or two longer)
+    This function calculates chunks that have the same middle timestamp as the properly windowed chunks, but
+    have durations of 30 seconds.
+    """
 
     first_second = df['ts'].iloc[0]
     last_second = df['ts'].iloc[-1]
