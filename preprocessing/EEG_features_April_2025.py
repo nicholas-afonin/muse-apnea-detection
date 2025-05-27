@@ -422,9 +422,9 @@ def extract_eeg_features(source_files_path, output_path, window_size=30, stride=
     combine_and_save_features_for_subjects(eeg_files, staging_files, output_path, window_size=window_size, stride=stride)
 
 if __name__ == "__main__":
-    extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=15, stride=None)
-    extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=30,
-                         stride=None)
-    extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=10, stride=None)
-    extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=5, stride=None)
+    # extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=15, stride=None)
+    # extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=30,
+    #                      stride=None)
+    # extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=10, stride=None)
+    # extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=5, stride=None)
     extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=1, stride=None)
