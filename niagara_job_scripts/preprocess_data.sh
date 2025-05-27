@@ -12,7 +12,7 @@ source /home/a/alim/afoninni/.virtualenvs/env2/bin/activate
 cd /home/a/alim/afoninni/muse-apnea-detection/preprocessing || exit
 
 export NUMBA_CACHE_DIR=/scratch/a/alim/afoninni/tmp  # fixes an error caused by a sub-dependency (numba)
-expor MPLCONFIGDIR=/scratch/a/alim/afoininni/tmp
+expor MPLCONFIGDIR=/scratch/a/alim/afoininni/tmp  # also a small fix (this one is not required)
 
 
-python EEG_features_April_2025.py
+python ACC_features_April_2025.py
