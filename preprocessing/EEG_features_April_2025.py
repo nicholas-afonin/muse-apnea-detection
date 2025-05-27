@@ -3,6 +3,8 @@ import numpy as np
 from scipy.signal import welch, butter, filtfilt
 from scipy.stats import entropy
 import glob
+
+from tensorflow.python.util.dispatch import apis_with_type_based_dispatch
 from yasa import sw_detect, spindles_detect
 from scipy import integrate
 import antropy as ant
@@ -10,6 +12,7 @@ import scipy.stats as sp_stats
 import warnings; warnings.simplefilter('ignore')
 import config
 import os
+import math
 
 
 """
@@ -108,7 +111,7 @@ def bandpower(data, sf, band, window_sec=None, relative=False):
     return bp
 
 
-def  compute_psd_features_for_channel(data, sampling_rate=256):
+def compute_psd_features_for_channel(data, sp_sw_data, sampling_rate=256):
     # Compute bandpowers
     band_powers = {}
     band_powers_rel = {}
@@ -130,24 +133,26 @@ def  compute_psd_features_for_channel(data, sampling_rate=256):
     petrosian = ant.petrosian_fd(data, axis=0)
     katz = ant.katz_fd(data, axis=0)
 
-
-
-    # ## Extract stat features
+    # Extract stat features using scipy_stats
     std = np.std(data)
     iqr = sp_stats.iqr(data, rng=(25, 75))
     skew = sp_stats.skew(data)
     kurt = sp_stats.kurtosis(data)
 
-    sampling_rate = 256
-
+    # Extract slow-wave and sleep spindle counts
+    # Uses a different chunk than the rest of the features because yasa.spindles_detect and yasa.sw_detect require
+    # >= 30-second windows. See 'obtain_sw_sp_compatible_chunks' function for more details.
     min_len = 30 * sampling_rate  # 30-s ⇒ 7680 samples @256 Hz
-    if len(data) < min_len:  # TEMPORARY FIX JUST SETS SW AND SP COUNTS TO 0 IF WINDOW SIZE WOULD CAUSE AN ERROR
+    if len(sp_sw_data) < min_len:
         sp_count = 0
         sw_count = 0
+        raise Exception("SP_SW_WINDOW IS SHORTER THAN 30S, CANNOT COMPUTE SP_COUNT or SW_COUNT FEATURES")
+        # theoretically can just comment this raise error out and move on with life if sp_count and sw_count are deemed
+        # unimportant
     else:
-        sp = spindles_detect(data, sampling_rate, verbose="critical")
+        sp = spindles_detect(sp_sw_data, sampling_rate, verbose="critical")
         sp_count = 0 if sp is None else len(sp.summary())
-        sw = sw_detect(data, sampling_rate, verbose="critical")
+        sw = sw_detect(sp_sw_data, sampling_rate, verbose="critical")
         sw_count = 0 if sw is None else len(sw.summary())
 
 
@@ -226,6 +231,39 @@ def shannon_entropy(data):
     return entropy(np.histogram(data, density=True)[0])
 
 
+def ceildiv(a, b):
+    # Simple ceiling division implementation
+    return -(a // -b)
+
+
+def obtain_sw_sp_compatible_chunks(df, start_time, window_size, sampling_rate=256):
+    # Yasa's sw and sp detection require data chunks of AT LEAST 30 seconds duration (see logic below, sometimes could
+    # be a second or two longer)
+    # This function calculates chunks that have the same middle timestamp as the properly windowed chunks, but
+    # have durations of 30 seconds.
+
+    first_second = df['ts'].iloc[0]
+    last_second = df['ts'].iloc[-1]
+
+    half_window = window_size / 2
+    middle_of_chunk = start_time + half_window # NOTE THIS CAN BE A FLOAT CURRENTLY
+
+    if middle_of_chunk - 15 < first_second:  # If the start of the 30s window is cut off
+        sp_sw_start_time = first_second
+        sp_sw_end_time = first_second + 30
+    elif middle_of_chunk + 15 > last_second:  # If the end of the 30s window is cut off
+        sp_sw_start_time = last_second - 30
+        sp_sw_end_time = last_second
+    else:  # If nothing is cut off and the 30s window extends cleanly 15s from the middle of the chunk
+        sp_sw_start_time = math.floor(middle_of_chunk - 15)
+        sp_sw_end_time = math.ceil(middle_of_chunk + 15)
+
+    # Slice out appropriate chunk of data that is at least 30s no matter what
+    sp_sw_chunk = df[(df['ts'] >= sp_sw_start_time) & (df['ts'] <= sp_sw_end_time)]
+
+    return sp_sw_chunk
+
+
 def compute_eeg_features_for_window(df, df_label_time, sampling_rate=256):
     # Check if required columns are present in the input dataframe
     required_columns = ['ts', 'ch1', 'ch2', 'ch3', 'ch4']
@@ -240,9 +278,11 @@ def compute_eeg_features_for_window(df, df_label_time, sampling_rate=256):
     feature_list = []
     start_times = df_label_time['start'].tolist()
     names = df_label_time['name'].tolist()
+    window_size = start_times[1] - start_times[0]  # needs to change if overlapping windows are ever considered
 
     for i in range(len(start_times) - 1):
         chunk = df[(df['ts'] >= start_times[i]) & (df['ts'] < start_times[i + 1])]
+        sp_sw_chunk = obtain_sw_sp_compatible_chunks(df, start_times[i], window_size=window_size)
 
         # Check if the chunk is empty
         if chunk.empty:
@@ -256,10 +296,9 @@ def compute_eeg_features_for_window(df, df_label_time, sampling_rate=256):
         for ch in ['ch1', 'ch2', 'ch3', 'ch4']:
             lowcut, highcut = 0.5, 30.0
             filtered_data = butter_bandpass_filter(chunk[ch], lowcut, highcut, sampling_rate)
-            #filtered_data = chunk[ch]
+            sp_sw_filtered_data = butter_bandpass_filter(sp_sw_chunk[ch], lowcut, highcut, sampling_rate)
 
-
-            ch_features = compute_psd_features_for_channel(filtered_data, sampling_rate)
+            ch_features = compute_psd_features_for_channel(filtered_data, sp_sw_filtered_data, sampling_rate)
             
             for band, power in ch_features.items():
                 features[f"{ch}_{band}"] = power
@@ -305,37 +344,6 @@ def resample_sleep_staging(df, new_window_size, stride):
     else:
         raise Exception("Does not currently support sliding windows. Slide must be -1")
 
-
-def combine_features_from_files(file_list, staging_file_list, window_size=30, stride=None):
-    combined_features_list = []
-    
-    for file, staging_file in zip(file_list, staging_file_list):
-        df = pd.read_csv(file)
-        # Print the length of each file
-        df_label_time = pd.read_csv(staging_file)
-
-        # Resample sleep stage labels so that features are extracted for the relevant time windows
-        df_label_time = resample_sleep_staging(df_label_time, new_window_size=window_size, stride=stride)
-
-        # Print the length of each file
-        print(f"Length of {file.split('/')[-1]}: {len(df)} rows")
-        
-        # Compute features for chunks based on start times from df_label_time
-        features = compute_eeg_features_for_window(df, df_label_time)
-
-        # features_30s[features_30s.columns] = robust_scale(features_30s, quantile_range=(5, 95))
-        # print(features_30s)
-        
-        # Add the file name as a new column
-        features['file_name'] = file.split('/')[-1]
-
-        # Append to the list
-        combined_features_list.append(features)
-
-    # Concatenate the dataframes
-    combined_features = pd.concat(combined_features_list, ignore_index=True)
-    
-    return combined_features
 
 def save_features_for_subject(features_df, subject_name, output_folder):
     os.makedirs(output_folder, exist_ok=True)  # Ensures the output path actually exists and makes it if not
@@ -414,8 +422,9 @@ def extract_eeg_features(source_files_path, output_path, window_size=30, stride=
     combine_and_save_features_for_subjects(eeg_files, staging_files, output_path, window_size=window_size, stride=stride)
 
 if __name__ == "__main__":
-    extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=30, stride=None)
     extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=15, stride=None)
-    # extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=10, stride=None)
-    # extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=5, stride=None)
-    # extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=1, stride=None)
+    extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=30,
+                         stride=None)
+    extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=10, stride=None)
+    extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=5, stride=None)
+    extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=1, stride=None)
