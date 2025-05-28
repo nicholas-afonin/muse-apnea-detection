@@ -13,7 +13,8 @@ import config
 import os
 import math
 import warnings
-
+import time
+from joblib import Parallel, delayed
 
 """
 NOTE
@@ -21,7 +22,11 @@ Currently only detects sleep spindles and slow waves for 30s windows. Anything l
 the way YASA does the calculation. Ask Nick for more details.
 """
 
-
+if config.running_locally:
+    CPU_CORES_AVAILABLE = 10
+else:
+    CPU_CORES_AVAILABLE = int(os.getenv("SLURM_CPUS_PER_TASK", os.cpu_count()))
+    print(f"{CPU_CORES_AVAILABLE} CPU cores available")
 
 # Define a function to create a bandpass filter
 def butter_bandpass(lowcut, highcut, fs, order=4):
@@ -111,7 +116,7 @@ def bandpower(data, sf, band, window_sec=None, relative=False):
     return bp
 
 
-def compute_psd_features_for_channel(data, sp_sw_data, sampling_rate=256):
+def compute_psd_features_for_channel(data, sp_sw_data, bandpower_data, sampling_rate=256):
     # Compute bandpowers
     band_powers = {}
     band_powers_rel = {}
@@ -122,9 +127,9 @@ def compute_psd_features_for_channel(data, sp_sw_data, sampling_rate=256):
         # band_powers[band_name] = bandpower(data, sampling_rate, band_limits, 'multitaper')
         # band_powers_rel[band_name] = bandpower(data, sampling_rate, band_limits, 'multitaper', relative=True)
         win_sec = 5
-        band_powers[band_name] = bandpower(data, sampling_rate, band_limits, win_sec)
-        band_powers_rel[band_name] = bandpower(data, sampling_rate, band_limits, win_sec, relative=True)
-    
+        band_powers[band_name] = bandpower(bandpower_data, sampling_rate, band_limits, win_sec)
+        band_powers_rel[band_name] = bandpower(bandpower_data, sampling_rate, band_limits, win_sec, relative=True)
+
 
     # Calculate standard descriptive statistics
     hMob, hComp= ant.hjorth_params(data)
@@ -146,7 +151,6 @@ def compute_psd_features_for_channel(data, sp_sw_data, sampling_rate=256):
     if len(sp_sw_data) < min_len:
         sp_count = 0
         sw_count = 0
-        warnings.warn("SP_SW_WINDOW IS SHORTER THAN 30S, CANNOT COMPUTE SP_COUNT OR SW_COUNT FEATURES")
     else:
         sp = spindles_detect(sp_sw_data, sampling_rate, verbose="critical")
         sp_count = 0 if sp is None else len(sp.summary())
@@ -264,6 +268,71 @@ def obtain_sw_sp_compatible_chunks(df, start_time, window_size, sampling_rate=25
     return sp_sw_chunk
 
 
+def obtain_bandpower_compatible_chunks(df, start_time, window_size, sampling_rate=256):
+    """
+    similar issue to sw and sp but for the bandpower calculation, which requires 5s windows.
+    note variable names are not updated. Currently taking a minimum 6s window to pass to the bandpower function.
+    """
+
+    first_second = df['ts'].iloc[0]
+    last_second = df['ts'].iloc[-1]
+
+    half_window = window_size / 2
+    middle_of_chunk = start_time + half_window # NOTE THIS CAN BE A FLOAT CURRENTLY
+
+    if middle_of_chunk - 15 < first_second:  # If the start of the 30s window is cut off
+        sp_sw_start_time = first_second
+        sp_sw_end_time = first_second + 6
+    elif middle_of_chunk + 15 > last_second:  # If the end of the 30s window is cut off
+        sp_sw_start_time = last_second - 6
+        sp_sw_end_time = last_second
+    else:  # If nothing is cut off and the 30s window extends cleanly 15s from the middle of the chunk
+        sp_sw_start_time = math.floor(middle_of_chunk - 3)
+        sp_sw_end_time = math.ceil(middle_of_chunk + 3)
+
+    # Slice out appropriate chunk of data that is at least 30s no matter what
+    sp_sw_chunk = df[(df['ts'] >= sp_sw_start_time) & (df['ts'] <= sp_sw_end_time)]
+
+    return sp_sw_chunk
+
+
+def compute_features_for_window_but_smaller(filtered_df, start_times, names, window_size, i, sampling_rate):
+    """If you ever need to figure out why this exists I'm sorry. Basically I need
+    a simple modular function to call such that I can parallelize the computations."""
+    chunk = filtered_df[(filtered_df['ts'] >= start_times[i]) & (filtered_df['ts'] < start_times[i + 1])]
+    sp_sw_chunk = obtain_sw_sp_compatible_chunks(filtered_df, start_times[i], window_size=window_size)
+    bandpower_chunk = obtain_bandpower_compatible_chunks(filtered_df, start_times[i], window_size=window_size)
+
+    # Check if the chunk is empty
+    if chunk.empty:
+        print(f"Warning: No data found for start time {start_times[i]} to {start_times[i + 1]}. Skipping...")
+        return None
+
+    # Initialize features with timestamp and name
+    features = {"ts": chunk['ts'].iloc[0], "name": names[i]}
+
+    # Compute features for each channel in parallel
+    ch_features = Parallel(n_jobs=4)(
+        delayed(compute_psd_features_for_channel)(chunk[ch], sp_sw_chunk[ch], bandpower_chunk[ch], sampling_rate) for ch
+        in ["ch1", "ch2", "ch3", "ch4"])
+
+    ch_features_dict = {}
+    count = 0
+    for ch in ["ch1", "ch2", "ch3", "ch4"]:
+        ch_features_dict[ch] = ch_features[count]
+        count += 1
+
+    for ch in ['ch1', 'ch2', 'ch3', 'ch4']:
+        # ch_features = compute_psd_features_for_channel(chunk[ch], sp_sw_chunk[ch], bandpower_chunk[ch], sampling_rate)
+
+        for band, power in ch_features_dict[ch].items():
+            features[f"{ch}_{band}"] = power
+        features[f"{ch}_ShannonEntropy"] = shannon_entropy(chunk)
+
+    return features
+
+
+
 def compute_eeg_features_for_window(df, df_label_time, sampling_rate=256):
     # Check if required columns are present in the input dataframe
     required_columns = ['ts', 'ch1', 'ch2', 'ch3', 'ch4']
@@ -274,37 +343,29 @@ def compute_eeg_features_for_window(df, df_label_time, sampling_rate=256):
     # Check if 'start' and 'name' columns are present in df_label_time
     if 'start' not in df_label_time.columns or 'name' not in df_label_time.columns:
         raise ValueError(f"Columns 'start' or 'name' not found in the df_label_time DataFrame.")
-    
+
+    # Initialize features list based on sleep staging file
     feature_list = []
     start_times = df_label_time['start'].tolist()
     names = df_label_time['name'].tolist()
     window_size = start_times[1] - start_times[0]  # needs to change if overlapping windows are ever considered
 
-    for i in range(len(start_times) - 1):
-        chunk = df[(df['ts'] >= start_times[i]) & (df['ts'] < start_times[i + 1])]
-        sp_sw_chunk = obtain_sw_sp_compatible_chunks(df, start_times[i], window_size=window_size)
+    # Apply butter bandpass filter to all channels of data before processing windows
+    filtered_df = df.copy()
+    lowcut, highcut = 0.5, 30.0
+    for ch in ['ch1', 'ch2', 'ch3', 'ch4']:
+        filtered_df[ch] = butter_bandpass_filter(filtered_df[ch], lowcut, highcut, sampling_rate)
 
-        # Check if the chunk is empty
-        if chunk.empty:
-            print(f"Warning: No data found for start time {start_times[i]} to {start_times[i + 1]}. Skipping...")
-            continue
-        
-        # Initialize features with timestamp and name
-        features = {"ts": chunk['ts'].iloc[0], "name": names[i]}
+    # Compute relevant features for each window of data. Leveraging parallel processing.
+    features_for_all_windows = Parallel(n_jobs=CPU_CORES_AVAILABLE - 1)(
+        delayed(compute_features_for_window_but_smaller)(filtered_df, start_times, names, window_size, i, sampling_rate)
+        for i in range(len(start_times) - 1)
+    )
 
-        # Apply bandpass filter to EEG data (adjust lowcut and highcut frequencies as needed)
-        for ch in ['ch1', 'ch2', 'ch3', 'ch4']:
-            lowcut, highcut = 0.5, 30.0
-            filtered_data = butter_bandpass_filter(chunk[ch], lowcut, highcut, sampling_rate)
-            sp_sw_filtered_data = butter_bandpass_filter(sp_sw_chunk[ch], lowcut, highcut, sampling_rate)
-
-            ch_features = compute_psd_features_for_channel(filtered_data, sp_sw_filtered_data, sampling_rate)
-            
-            for band, power in ch_features.items():
-                features[f"{ch}_{band}"] = power
-            features[f"{ch}_ShannonEntropy"] = shannon_entropy(filtered_data)
-
-        feature_list.append(features)
+    # Unpack all the results from the parallel window processing and append them to the main feature list
+    for features_for_window in features_for_all_windows:
+        if features_for_window is not None:
+            feature_list.append(features_for_window)
     
     # Convert the list of dictionaries into a dataframe
     features_df = pd.DataFrame(feature_list)
@@ -356,6 +417,8 @@ def combine_and_save_features_for_subjects(file_list, staging_file_list, output_
     existing_files = {f.split('_eeg_features.csv')[0]: f for f in os.listdir(output_folder) if f.endswith('_eeg_features.csv')}
 
     for file, staging_file in zip(file_list, staging_file_list):
+        time_start = time.time()
+
         # Extract subject name from file path
         filename_with_extension = os.path.basename(file)
         subject_name = filename_with_extension.split('_eeg.csv')[0]
@@ -376,6 +439,8 @@ def combine_and_save_features_for_subjects(file_list, staging_file_list, output_
         
         # Save features for this subject
         save_features_for_subject(features_30s, subject_name, output_folder)
+
+        print(f"Feature calculation for {file} took {time.time()-time_start} seconds.")
 
 
 def extract_eeg_features(source_files_path, output_path, window_size=30, stride=None):
@@ -422,9 +487,4 @@ def extract_eeg_features(source_files_path, output_path, window_size=30, stride=
     combine_and_save_features_for_subjects(eeg_files, staging_files, output_path, window_size=window_size, stride=stride)
 
 if __name__ == "__main__":
-    # extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=15, stride=None)
-    # extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=30,
-    #                      stride=None)
-    # extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=10, stride=None)
-    # extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=5, stride=None)
-    extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=1, stride=None)
+    extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=30, stride=None)
