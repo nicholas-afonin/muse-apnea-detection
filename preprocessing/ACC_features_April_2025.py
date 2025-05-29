@@ -10,6 +10,14 @@ import numpy as np
 import os
 import config
 from scipy.fft import fft
+from joblib import Parallel, delayed
+
+
+if config.running_locally:
+    CPU_CORES_AVAILABLE = 10
+else:
+    CPU_CORES_AVAILABLE = int(os.getenv("SLURM_CPUS_PER_TASK", os.cpu_count()))
+    print(f"{CPU_CORES_AVAILABLE} CPU cores available")
 
 
 def compute_features(df, df_label_time, threshold=0.0, cutoff_freq=0.5, window_size=30):
@@ -174,33 +182,32 @@ def resample_sleep_staging(df, new_window_size, stride):
         raise Exception("Does not currently support sliding windows. Slide must be -1")
 
 
-def combine_acc_features_from_files(file_list, staging_file_list, output_path, threshold=0.0, window_size=30, stride=None):
-    for file, staging_file in zip(file_list, staging_file_list):
-        output_file_name = os.path.join(output_path, f"{os.path.basename(file).replace('_acc.csv', '_acc_features.csv')}")
+def combine_acc_features_from_file(file, staging_file, output_path, threshold=0.0, window_size=30, stride=None):
+    output_file_name = os.path.join(output_path, f"{os.path.basename(file).replace('_acc.csv', '_acc_features.csv')}")
 
-        # Check if the output file already exists
-        if os.path.exists(output_file_name):
-            print(f"Skipping {file.split('/')[-1]}: already processed.")
-            continue
-    
-        df = pd.read_csv(file)
-        df_label_time = pd.read_csv(staging_file)
+    # Check if the output file already exists
+    if os.path.exists(output_file_name):
+        print(f"Skipping {file.split('/')[-1]}: already processed.")
+        return
 
-        # Print the length of each _acc file
-        print(f"Now processing > {file.split('/')[-1]}: {len(df)} rows")
+    df = pd.read_csv(file)
+    df_label_time = pd.read_csv(staging_file)
 
-        # Resample staging df to appropriate time windows as requested (extraction is based on it)
-        df_label_time = resample_sleep_staging(df_label_time, new_window_size=window_size, stride=stride)
+    # Print the length of each _acc file
+    print(f"Now processing > {file.split('/')[-1]}: {len(df)} rows")
 
-        # Compute features for chunks based on start times from df_label_time
-        features = compute_features(df, df_label_time, threshold)
+    # Resample staging df to appropriate time windows as requested (extraction is based on it)
+    df_label_time = resample_sleep_staging(df_label_time, new_window_size=window_size, stride=stride)
 
-        # Generate an output file name
-        output_file_name = os.path.join(output_path, f"{os.path.basename(file).replace('_acc.csv', '_acc_features.csv')}")
-        
-        # Save features to CSV
-        features.to_csv(output_file_name, index=False)
-        print(f"Saved features to: {output_file_name}")
+    # Compute features for chunks based on start times from df_label_time
+    features = compute_features(df, df_label_time, threshold)
+
+    # Generate an output file name
+    output_file_name = os.path.join(output_path, f"{os.path.basename(file).replace('_acc.csv', '_acc_features.csv')}")
+
+    # Save features to CSV
+    features.to_csv(output_file_name, index=False)
+    print(f"Saved features to: {output_file_name}")
 
 
 def extract_acc_features(source_files_path, output_path, window_size=30, stride=None):
@@ -229,10 +236,9 @@ def extract_acc_features(source_files_path, output_path, window_size=30, stride=
     output_path = output_path + "ACC_features_window" + str(window_size) + "_stride" + str(stride_string) + "/"
     os.makedirs(output_path, exist_ok=True)
 
-    # Compute and combine features from all files and save them individually
+    # Compute and combine features from all files and save them individually. Leverage joblib parallelism to use all cores.
     print("Extracting features from " + source_files_path + "\nWindow size: " + str(window_size) + "\nStride: " + str(stride) + "\n --- ")
-    combine_acc_features_from_files(acc_files, staging_files, output_path, threshold=0.0, window_size=window_size, stride=stride)
-
+    Parallel(n_jobs=CPU_CORES_AVAILABLE - 1)(delayed(combine_acc_features_from_file)(acc_file, staging_file, output_path, threshold=0.0, window_size=window_size, stride=stride) for acc_file, staging_file in zip(acc_files, staging_files))
 
 if __name__ == '__main__':
-    extract_acc_features(config.path.synced_csv_directory, config.path.ACC_features_directory, window_size=1, stride=None)
+    extract_acc_features(config.path.synced_csv_directory, config.path.ACC_features_directory, window_size=30, stride=None)

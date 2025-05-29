@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=muse_preprocessing
-#SBATCH --time=24:00:00
+#SBATCH --time=6:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=40
@@ -16,4 +16,4 @@ export MPLCONFIGDIR=/scratch/a/alim/afoininni/tmp  # also a small fix (this one 
 export OMP_NUM_THREADS=1
 export NUMBA_NUM_THREADS=1
 
-python EEG_features_April_2025.py
+python ACC_features_April_2025.py

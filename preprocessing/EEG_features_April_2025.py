@@ -271,7 +271,8 @@ def obtain_sw_sp_compatible_chunks(df, start_time, window_size, sampling_rate=25
 def obtain_bandpower_compatible_chunks(df, start_time, window_size, sampling_rate=256):
     """
     similar issue to sw and sp but for the bandpower calculation, which requires 5s windows.
-    note variable names are not updated. Currently taking a minimum 6s window to pass to the bandpower function.
+    note variable names are not updated. this function will just use the normal window size unless if it's
+    less than 5s, in which case it always uses minimum 5s -- for appropriate bandpower calculations.
     """
 
     first_second = df['ts'].iloc[0]
@@ -280,56 +281,25 @@ def obtain_bandpower_compatible_chunks(df, start_time, window_size, sampling_rat
     half_window = window_size / 2
     middle_of_chunk = start_time + half_window # NOTE THIS CAN BE A FLOAT CURRENTLY
 
+    if window_size < 5:
+        bandpower_window_size = 5
+    else:
+        bandpower_window_size = window_size
+
     if middle_of_chunk - 15 < first_second:  # If the start of the 30s window is cut off
         sp_sw_start_time = first_second
-        sp_sw_end_time = first_second + 6
+        sp_sw_end_time = first_second + bandpower_window_size
     elif middle_of_chunk + 15 > last_second:  # If the end of the 30s window is cut off
-        sp_sw_start_time = last_second - 6
+        sp_sw_start_time = last_second - bandpower_window_size
         sp_sw_end_time = last_second
     else:  # If nothing is cut off and the 30s window extends cleanly 15s from the middle of the chunk
-        sp_sw_start_time = math.floor(middle_of_chunk - 3)
-        sp_sw_end_time = math.ceil(middle_of_chunk + 3)
+        sp_sw_start_time = math.floor(middle_of_chunk - bandpower_window_size/2)
+        sp_sw_end_time = math.ceil(middle_of_chunk + bandpower_window_size/2)
 
     # Slice out appropriate chunk of data that is at least 30s no matter what
     sp_sw_chunk = df[(df['ts'] >= sp_sw_start_time) & (df['ts'] <= sp_sw_end_time)]
 
     return sp_sw_chunk
-
-
-def compute_features_for_window_but_smaller(filtered_df, start_times, names, window_size, i, sampling_rate):
-    """If you ever need to figure out why this exists I'm sorry. Basically I need
-    a simple modular function to call such that I can parallelize the computations."""
-    chunk = filtered_df[(filtered_df['ts'] >= start_times[i]) & (filtered_df['ts'] < start_times[i + 1])]
-    sp_sw_chunk = obtain_sw_sp_compatible_chunks(filtered_df, start_times[i], window_size=window_size)
-    bandpower_chunk = obtain_bandpower_compatible_chunks(filtered_df, start_times[i], window_size=window_size)
-
-    # Check if the chunk is empty
-    if chunk.empty:
-        print(f"Warning: No data found for start time {start_times[i]} to {start_times[i + 1]}. Skipping...")
-        return None
-
-    # Initialize features with timestamp and name
-    features = {"ts": chunk['ts'].iloc[0], "name": names[i]}
-
-    # Compute features for each channel in parallel
-    ch_features = Parallel(n_jobs=4)(
-        delayed(compute_psd_features_for_channel)(chunk[ch], sp_sw_chunk[ch], bandpower_chunk[ch], sampling_rate) for ch
-        in ["ch1", "ch2", "ch3", "ch4"])
-
-    ch_features_dict = {}
-    count = 0
-    for ch in ["ch1", "ch2", "ch3", "ch4"]:
-        ch_features_dict[ch] = ch_features[count]
-        count += 1
-
-    for ch in ['ch1', 'ch2', 'ch3', 'ch4']:
-        # ch_features = compute_psd_features_for_channel(chunk[ch], sp_sw_chunk[ch], bandpower_chunk[ch], sampling_rate)
-
-        for band, power in ch_features_dict[ch].items():
-            features[f"{ch}_{band}"] = power
-        features[f"{ch}_ShannonEntropy"] = shannon_entropy(chunk)
-
-    return features
 
 
 
@@ -357,15 +327,28 @@ def compute_eeg_features_for_window(df, df_label_time, sampling_rate=256):
         filtered_df[ch] = butter_bandpass_filter(filtered_df[ch], lowcut, highcut, sampling_rate)
 
     # Compute relevant features for each window of data. Leveraging parallel processing.
-    features_for_all_windows = Parallel(n_jobs=CPU_CORES_AVAILABLE - 1)(
-        delayed(compute_features_for_window_but_smaller)(filtered_df, start_times, names, window_size, i, sampling_rate)
-        for i in range(len(start_times) - 1)
-    )
+    for i in range(len(start_times) - 1):
+        chunk = filtered_df[(filtered_df['ts'] >= start_times[i]) & (filtered_df['ts'] < start_times[i + 1])]
+        sp_sw_chunk = obtain_sw_sp_compatible_chunks(filtered_df, start_times[i], window_size=window_size)
+        bandpower_chunk = obtain_bandpower_compatible_chunks(filtered_df, start_times[i], window_size=window_size)
 
-    # Unpack all the results from the parallel window processing and append them to the main feature list
-    for features_for_window in features_for_all_windows:
-        if features_for_window is not None:
-            feature_list.append(features_for_window)
+        # Check if the chunk is empty
+        if chunk.empty:
+            print(f"Warning: No data found for start time {start_times[i]} to {start_times[i + 1]}. Skipping...")
+            continue
+
+        # Initialize features with timestamp and name
+        features = {"ts": chunk['ts'].iloc[0], "name": names[i]}
+
+        for ch in ['ch1', 'ch2', 'ch3', 'ch4']:
+            ch_features = compute_psd_features_for_channel(chunk[ch], sp_sw_chunk[ch], bandpower_chunk[ch],
+                                                           sampling_rate)
+
+            for band, power in ch_features.items():
+                features[f"{ch}_{band}"] = power
+            features[f"{ch}_ShannonEntropy"] = shannon_entropy(chunk[ch])
+
+        feature_list.append(features)
     
     # Convert the list of dictionaries into a dataframe
     features_df = pd.DataFrame(feature_list)
@@ -405,42 +388,40 @@ def resample_sleep_staging(df, new_window_size, stride):
     else:
         raise Exception("Does not currently support sliding windows. Slide must be -1")
 
-
 def save_features_for_subject(features_df, subject_name, output_folder):
     os.makedirs(output_folder, exist_ok=True)  # Ensures the output path actually exists and makes it if not
     output_path = os.path.join(output_folder, f"{subject_name}_eeg_features.csv")
     features_df.to_csv(output_path, index=False)
     print(f"Saved EEG features for {subject_name} to: {output_path}")
 
-def combine_and_save_features_for_subjects(file_list, staging_file_list, output_folder, window_size=30, stride=None):
-    # Create a set of existing output files for quick lookup
-    existing_files = {f.split('_eeg_features.csv')[0]: f for f in os.listdir(output_folder) if f.endswith('_eeg_features.csv')}
+def extract_and_save_features_for_recording(file, staging_file, output_folder, existing_files, window_size=30, stride=None):
+    time_start = time.time()
 
-    for file, staging_file in zip(file_list, staging_file_list):
-        time_start = time.time()
+    # Extract subject name from file path
+    filename_with_extension = os.path.basename(file)
+    subject_name = filename_with_extension.split('_eeg.csv')[0]
 
-        # Extract subject name from file path
-        filename_with_extension = os.path.basename(file)
-        subject_name = filename_with_extension.split('_eeg.csv')[0]
-        
-        # Check if features file already exists for this subject
-        if subject_name in existing_files:
-            print(f"Features already calculated for {subject_name}. Skipping...")
-            continue
+    # Check if features file already exists for this subject
+    if subject_name in existing_files:
+        print(f"Features already calculated for {subject_name}. Skipping...")
+        return
 
-        df = pd.read_csv(file)
-        df_label_time = pd.read_csv(staging_file)
+    df = pd.read_csv(file)
+    df_label_time = pd.read_csv(staging_file)
 
-        # Resample sleep stage labels so that features are extracted for the relevant time windows
-        df_label_time = resample_sleep_staging(df_label_time, new_window_size=window_size, stride=stride)
+    # Print the length of each _acc file
+    print(f"Now processing > {file.split('/')[-1]}: {len(df)} rows")
 
-        # Compute features for chunks based on start times from df_label_time
-        features_30s = compute_eeg_features_for_window(df, df_label_time)
-        
-        # Save features for this subject
-        save_features_for_subject(features_30s, subject_name, output_folder)
+    # Resample sleep stage labels so that features are extracted for the relevant time windows
+    df_label_time = resample_sleep_staging(df_label_time, new_window_size=window_size, stride=stride)
 
-        print(f"Feature calculation for {file} took {time.time()-time_start} seconds.")
+    # Compute features for chunks based on start times from df_label_time
+    features_30s = compute_eeg_features_for_window(df, df_label_time)
+
+    # Save features for this subject
+    save_features_for_subject(features_30s, subject_name, output_folder)
+
+    print(f"Feature calculation for {file} complete. Took {time.time()-time_start} seconds.")
 
 
 def extract_eeg_features(source_files_path, output_path, window_size=30, stride=None):
@@ -482,9 +463,17 @@ def extract_eeg_features(source_files_path, output_path, window_size=30, stride=
     output_path = output_path + "EEG_features_window" + str(window_size) + "_stride" + str(stride_string) + "/"
     os.makedirs(output_path, exist_ok=True)
 
-    # Usage
+    # Extract features from all files. Leverage joblib parallelism to use all cores.
     print("Extracting features from " + source_files_path + "\nWindow size: " + str(window_size) + "\nStride: " + str(stride) + "\n --- ")
-    combine_and_save_features_for_subjects(eeg_files, staging_files, output_path, window_size=window_size, stride=stride)
+    # Create a set of existing output files for quick lookup
+    existing_files = {f.split('_eeg_features.csv')[0]: f for f in os.listdir(output_path) if
+                      f.endswith('_eeg_features.csv')}
+
+    # for file, staging_file in zip(eeg_files, staging_files):
+    #     extract_and_save_features_for_recording(file, staging_file, output_path, existing_files, window_size=30, stride=stride)
+
+    Parallel(n_jobs=CPU_CORES_AVAILABLE-1)(delayed(extract_and_save_features_for_recording)(eeg_file, staging_file, output_path, existing_files, window_size=30, stride=stride) for eeg_file, staging_file in zip(eeg_files, staging_files))
+
 
 if __name__ == "__main__":
     extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=30, stride=None)
