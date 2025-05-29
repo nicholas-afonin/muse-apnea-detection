@@ -472,7 +472,7 @@ def extract_eeg_features(source_files_path, output_path, window_size=30, stride=
     # for file, staging_file in zip(eeg_files, staging_files):
     #     extract_and_save_features_for_recording(file, staging_file, output_path, existing_files, window_size=30, stride=stride)
 
-    Parallel(n_jobs=CPU_CORES_AVAILABLE-1)(delayed(extract_and_save_features_for_recording)(eeg_file, staging_file, output_path, existing_files, window_size=30, stride=stride) for eeg_file, staging_file in zip(eeg_files, staging_files))
+    Parallel(n_jobs=CPU_CORES_AVAILABLE-1)(delayed(extract_and_save_features_for_recording)(eeg_file, staging_file, output_path, existing_files, window_size=window_size, stride=stride) for eeg_file, staging_file in zip(eeg_files, staging_files))
 
 
 if __name__ == "__main__":
