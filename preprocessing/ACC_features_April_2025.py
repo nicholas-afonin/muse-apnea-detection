@@ -11,8 +11,6 @@ import os
 import config
 from scipy.fft import fft
 from joblib import Parallel, delayed
-from mpi4py import MPI
-from mpi4py.futures import MPIPoolExecutor
 
 
 if config.running_locally:
