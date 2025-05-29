@@ -11,6 +11,8 @@ import os
 import config
 from scipy.fft import fft
 from joblib import Parallel, delayed
+from mpi4py import MPI
+from mpi4py.futures import MPIPoolExecutor
 
 
 if config.running_locally:
@@ -241,4 +243,13 @@ def extract_acc_features(source_files_path, output_path, window_size=30, stride=
     Parallel(n_jobs=CPU_CORES_AVAILABLE - 1)(delayed(combine_acc_features_from_file)(acc_file, staging_file, output_path, threshold=0.0, window_size=window_size, stride=stride) for acc_file, staging_file in zip(acc_files, staging_files))
 
 if __name__ == '__main__':
-    extract_acc_features(config.path.synced_csv_directory, config.path.ACC_features_directory, window_size=30, stride=None)
+    extract_acc_features(config.path.synced_csv_directory, config.path.ACC_features_directory, window_size=20,
+                         stride=None)
+    extract_acc_features(config.path.synced_csv_directory, config.path.ACC_features_directory, window_size=15,
+                         stride=None)
+    extract_acc_features(config.path.synced_csv_directory, config.path.ACC_features_directory, window_size=10,
+                         stride=None)
+    extract_acc_features(config.path.synced_csv_directory, config.path.ACC_features_directory, window_size=5,
+                         stride=None)
+    extract_acc_features(config.path.synced_csv_directory, config.path.ACC_features_directory, window_size=1,
+                         stride=None)
