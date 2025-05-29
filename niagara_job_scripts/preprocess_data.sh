@@ -1,11 +1,11 @@
 #!/bin/bash
 #SBATCH --job-name=muse_preprocessing
-#SBATCH --time=6:00:00
+#SBATCH --time=24:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=40
-#SBATCH --output=/scratch/a/alim/afoninni/muse/muse_preprocessing_acc.out
-#SBATCH --error=/scratch/a/alim/afoninni/muse/muse_preprocessing_acc.err
+#SBATCH --output=/scratch/a/alim/afoninni/muse/muse_preprocessing_eeg.out
+#SBATCH --error=/scratch/a/alim/afoninni/muse/muse_preprocessing_eeg.err
 
 
 source /home/a/alim/afoninni/.virtualenvs/env2/bin/activate
@@ -16,4 +16,4 @@ export MPLCONFIGDIR=/scratch/a/alim/afoninni/tmp  # also a small fix (this one i
 export OMP_NUM_THREADS=1
 export NUMBA_NUM_THREADS=1
 
-python ACC_features_April_2025.py
+python EEG_features_April_2025.py
