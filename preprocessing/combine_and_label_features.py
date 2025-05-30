@@ -144,12 +144,14 @@ def process_features(ACC_EEG_feature_files: [str], event_label_files: [str], out
 
 if __name__ == '__main__':
     """OPTION 1 - combine features"""
-    acc_features_directory = os.path.join(config.path.ACC_features_directory, 'ACC_features_window30_strideNA/')
-    eeg_features_directory = os.path.join(config.path.EEG_features_directory, 'EEG_features_window30_strideNA/')
+    window_size = 1
+
+    acc_features_directory = os.path.join(config.path.ACC_features_directory, f'ACC_features_window{window_size}_strideNA/')
+    eeg_features_directory = os.path.join(config.path.EEG_features_directory, f'EEG_features_window{window_size}_strideNA/')
     acc_files = sorted(glob.glob(acc_features_directory + '*_acc_features.csv'))
     eeg_files = sorted(glob.glob(eeg_features_directory + '*_eeg_features.csv'))
 
-    output_folder = os.path.join(config.path.EEG_ACC_features, "30s_windows/")
+    output_folder = os.path.join(config.path.EEG_ACC_features, f"{window_size}s_windows/")
     os.makedirs(output_folder, exist_ok=True)
 
     combine_features(acc_files, eeg_files, output_folder)
