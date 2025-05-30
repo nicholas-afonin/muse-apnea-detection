@@ -157,11 +157,11 @@ if __name__ == '__main__':
     combine_features(acc_files, eeg_files, output_folder)
 
     """OPTION 2 - only process already combined features"""
-    features_path = os.path.join(config.path.EEG_ACC_features, "30s_windows/")
+    features_path = os.path.join(config.path.EEG_ACC_features, f"{window_size}s_windows/")
     eeg_acc_files = sorted(glob.glob(features_path + '*_synced_features.csv'))
     event_files = sorted(glob.glob(config.path.raw_csv_directory + '*_events.csv'))
 
     output_folder = config.path.EEG_ACC_features_labelled
     os.makedirs(output_folder, exist_ok=True)
 
-    process_features(eeg_acc_files, event_files, output_folder, 0.30, 0.30, window_length=1)
+    process_features(eeg_acc_files, event_files, output_folder, 0.30, 0.30, window_length=window_size)
