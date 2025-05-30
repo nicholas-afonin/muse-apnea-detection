@@ -48,7 +48,8 @@ def label_apnea_events(df_features, df_events, min_overlap_fraction, window_leng
 
     # Labels for the final table, and which 'input labels' are mapped to them
     # in this case, all apnea-related events are simply mapped to the 'apnea_event' column
-    event_map = {'apnea_event': ['Hypopnea', 'Obstructive Apnea', 'Mixed Apnea', 'Central Apnea']}
+    event_map = {'apnea_event': ['Hypopnea', 'Obstructive Apnea', 'Mixed Apnea', 'Central Apnea'],
+                 'arousal_event': ['RERA', 'Arousal (ARO RES)', 'Arousal (ARO SPONT)']}
 
     # Calculate event end-times (from start times and durations)
     df_events = df_events.copy()
@@ -112,8 +113,9 @@ def combine_features(ACC_feature_files, EEG_feature_files, output_directory):
         df_acc_eeg.to_csv(full_out, index=False)
 
 
-def process_features(ACC_EEG_feature_files, event_label_files, output_directory, apnea_epoch_threshold, window_length=30):
-    output_directory = output_directory + 'EEG_ACC_features_labelled_ApneaThreshold' + str(apnea_epoch_threshold) + '_window' + str(window_length) + '/'
+def process_features(ACC_EEG_feature_files: [str], event_label_files: [str], output_directory: str, apnea_epoch_threshold: float, arousal_epoch_threshold: float, window_length: int=30):
+    output_directory = (output_directory + 'EEG_ACC_features_labelled_ApneaThreshold' + str(apnea_epoch_threshold) +
+                        '_ArousalThreshold' + str(arousal_epoch_threshold) + '_window' + str(window_length) + '/')
     os.makedirs(output_directory, exist_ok=True)
 
     for acc_eeg_file, event_file in zip(ACC_EEG_feature_files, event_label_files):
@@ -155,8 +157,5 @@ if __name__ == '__main__':
     eeg_acc_files = sorted(glob.glob(config.path.EEG_ACC_features + '*_synced_features.csv'))  # , reverse=True)
     event_files = sorted(glob.glob(config.path.raw_csv_directory + '*_events.csv'))  # , reverse=True)
 
-    process_features(eeg_acc_files, event_files, config.path.EEG_ACC_features_labelled, 0.01)
-    process_features(eeg_acc_files, event_files, config.path.EEG_ACC_features_labelled, 0.10)
-    process_features(eeg_acc_files, event_files, config.path.EEG_ACC_features_labelled, 0.25)
-    process_features(eeg_acc_files, event_files, config.path.EEG_ACC_features_labelled, 0.50)
-    process_features(eeg_acc_files, event_files, config.path.EEG_ACC_features_labelled, 0.75)
+    process_features(eeg_acc_files, event_files, config.path.EEG_ACC_features_labelled, 0.01, 0.01)
+    process_features(eeg_acc_files, event_files, config.path.EEG_ACC_features_labelled, 0.50, 0.50)

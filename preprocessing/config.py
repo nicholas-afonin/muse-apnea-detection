@@ -32,4 +32,4 @@ class path:
         ACC_features_directory = "/scratch/a/alim/afoninni/muse/ACC_features/"
         EEG_features_directory = "/scratch/a/alim/afoninni/muse/EEG_features/"
         EEG_ACC_features = "/scratch/a/alim/afoninni/muse/EEG_ACC_features_April2025/"
-        EEG_ACC_features_labelled = "/scratch/a/alim/afoninni/muse/EEG_ACC_features_labelled_May2025/"
+        EEG_ACC_features_labelled = "/scratch/a/alim/afoninni/muse/EEG_ACC_features_labelled_May-29-2025/"
