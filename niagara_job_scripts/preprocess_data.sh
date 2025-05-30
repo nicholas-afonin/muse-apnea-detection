@@ -16,4 +16,4 @@ export MPLCONFIGDIR=/scratch/a/alim/afoninni/tmp  # also a small fix (this one i
 export OMP_NUM_THREADS=1
 export NUMBA_NUM_THREADS=1
 
-python combine_and_label_features.py
+python EEG_features_April_2025.py
