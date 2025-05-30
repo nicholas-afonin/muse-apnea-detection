@@ -4,8 +4,8 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=40
-#SBATCH --output=/scratch/a/alim/afoninni/muse/arousal_labelling.out
-#SBATCH --error=/scratch/a/alim/afoninni/muse/arousal_labelling.err
+#SBATCH --output=/scratch/a/alim/afoninni/muse/eeg-features-10s.out
+#SBATCH --error=/scratch/a/alim/afoninni/muse/eeg-features-10s.err
 
 
 source /home/a/alim/afoninni/.virtualenvs/env2/bin/activate
@@ -16,4 +16,4 @@ export MPLCONFIGDIR=/scratch/a/alim/afoninni/tmp  # also a small fix (this one i
 export OMP_NUM_THREADS=1
 export NUMBA_NUM_THREADS=1
 
-python combine_and_label_features.py
+python EEG_features_April_2025.py
