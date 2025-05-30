@@ -15,9 +15,9 @@ def check_files(ACC_path, EEG_path, events_path):
     and simply returns the strings denoting those directories if yes"""
 
     # Get all CSV files with ACC features, EEG features, and events
-    acc_files = sorted(glob.glob(ACC_path + '*_acc_features.csv'))  # , reverse=True)
-    eeg_files = sorted(glob.glob(EEG_path + '*_eeg_features.csv'))  # , reverse=True)
-    event_files = sorted(glob.glob(events_path + '*_events.csv'))  # , reverse=True)
+    acc_files = sorted(glob.glob(ACC_path + '*_acc_features.csv'))
+    eeg_files = sorted(glob.glob(EEG_path + '*_eeg_features.csv'))
+    event_files = sorted(glob.glob(events_path + '*_events.csv'))
 
     # Extract recording IDs
     acc_prefixes = [os.path.basename(f).split('_synced_acc_features.csv')[0] for f in acc_files]
@@ -108,7 +108,7 @@ def combine_features(ACC_feature_files, EEG_feature_files, output_directory):
 
         # Save output
         filename = os.path.basename(acc_file).replace('_synced_acc_features.csv',
-                                                      '_synced_combined_features.csv')
+                                                      '_synced_features.csv')
         full_out = os.path.join(output_directory, filename)
         df_acc_eeg.to_csv(full_out, index=False)
 
@@ -125,7 +125,7 @@ def process_features(ACC_EEG_feature_files: [str], event_label_files: [str], out
 
         # drop extra or unneeded rows (dependent on the ACC_EEG_feature_files)
         # if generated using the function in this file, nothing needs to be removed
-        df_acc_eeg = df_acc_eeg.drop(columns=['name_y'])
+        # df_acc_eeg = df_acc_eeg.drop(columns=['name_y'])
 
         print(f"Now processing > {acc_eeg_file.split('/')[-1]}: {len(df_acc_eeg)} rows, with {len(df_events)} events")
 
@@ -137,25 +137,29 @@ def process_features(ACC_EEG_feature_files: [str], event_label_files: [str], out
 
         # save file to output location
         filename = os.path.basename(acc_eeg_file).replace('_synced_features.csv',
-                                                      '_synced_labelled_features.csv')
+                                                      '_synced_features.csv')
         full_out = os.path.join(output_directory, filename)
         df_acc_eeg.to_csv(full_out, index=False)
 
 
 if __name__ == '__main__':
-    # Check if the directory exists
-    if not os.path.exists(config.path.EEG_ACC_features_labelled):
-        # If it doesn't exist, create it
-        os.makedirs(config.path.EEG_ACC_features_labelled)
+    """OPTION 1 - combine features"""
+    acc_features_directory = os.path.join(config.path.ACC_features_directory, 'ACC_features_window30_strideNA/')
+    eeg_features_directory = os.path.join(config.path.EEG_features_directory, 'EEG_features_window30_strideNA/')
+    acc_files = sorted(glob.glob(acc_features_directory + '*_acc_features.csv'))
+    eeg_files = sorted(glob.glob(eeg_features_directory + '*_eeg_features.csv'))
 
-    """OPTION 1 - combine and then process features"""
-    # acc_files, eeg_files, event_files, prefixes = check_files(config.path.ACC_features_directory, config.path.EEG_features_directory, config.path.raw_csv_directory)
-    # combine_features(acc_files, eeg_files, config.path.EEG_ACC_features)
-    # process_features(config.path.EEG_ACC_features, config.path.raw_csv_directory, config.path.EEG_ACC_features_labelled)
+    output_folder = os.path.join(config.path.EEG_ACC_features, "30s_windows/")
+    os.makedirs(output_folder, exist_ok=True)
+
+    combine_features(acc_files, eeg_files, output_folder)
 
     """OPTION 2 - only process already combined features"""
-    eeg_acc_files = sorted(glob.glob(config.path.EEG_ACC_features + '*_synced_features.csv'))  # , reverse=True)
-    event_files = sorted(glob.glob(config.path.raw_csv_directory + '*_events.csv'))  # , reverse=True)
-
-    process_features(eeg_acc_files, event_files, config.path.EEG_ACC_features_labelled, 0.01, 0.01)
-    process_features(eeg_acc_files, event_files, config.path.EEG_ACC_features_labelled, 0.50, 0.50)
+    # features_path = os.path.join(config.path.EEG_ACC_features, "30s_windows/")
+    # eeg_acc_files = sorted(glob.glob(features_path + '*_synced_features.csv'))
+    # event_files = sorted(glob.glob(config.path.raw_csv_directory + '*_events.csv'))
+    #
+    # output_folder = config.path.EEG_ACC_features_labelled
+    # os.makedirs(output_folder, exist_ok=True)
+    #
+    # process_features(eeg_acc_files, event_files, output_folder, 0.50, 0.50, window_length=1)
