@@ -1,8 +1,5 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib
-from sklearn.model_selection import train_test_split
-import sklearn
 import pandas as pd
 import keras
 from keras.models import Sequential, load_model
@@ -62,8 +59,8 @@ def load_data(processed_features_directory, train_test_ratio):
     test_df = pd.DataFrame(scaler.transform(test_df), columns=test_df.columns)
 
     # Split into X and Y train and test
-    X_train = train_df.drop(columns=['ts', 'name'])
-    X_test = test_df.drop(columns=['ts', 'name'])
+    X_train = train_df.drop(columns=['ts', 'name', 'arousal_event'])
+    X_test = test_df.drop(columns=['ts', 'name', 'arousal_event'])
 
     y_train = X_train.pop('apnea_event')
     y_test = X_test.pop('apnea_event')
@@ -96,19 +93,19 @@ def load_data(processed_features_directory, train_test_ratio):
 def train_model(X_train, y_train, X_val, y_val):
     # Create model architecture
     basic_model = Sequential()  # initialize a basic sequential model
-    basic_model.add(Dense(units=128, activation='relu', input_shape=(167,), kernel_regularizer=l2(0.001)))  # input layer
+    basic_model.add(Dense(units=128, activation='relu', input_shape=(167,), kernel_regularizer=l2(0.01)))  # input layer
     basic_model.add(Dropout(0.4))  # to prevent overfitting
-    basic_model.add(Dense(64, activation='tanh', kernel_regularizer=l2(0.001)))
+    basic_model.add(Dense(64, activation='tanh', kernel_regularizer=l2(0.01)))
     basic_model.add(Dropout(0.4))
-    basic_model.add(Dense(32, activation='relu', kernel_regularizer=l2(0.001)))
+    basic_model.add(Dense(32, activation='relu', kernel_regularizer=l2(0.01)))
     basic_model.add(Dropout(0.4))
     basic_model.add(Dense(1, activation='sigmoid'))
 
-    adam = keras.optimizers.Adam(learning_rate=0.00005)
+    adam = keras.optimizers.Adam(learning_rate=0.00001)
     basic_model.compile(loss='binary_crossentropy', optimizer=adam)
 
     # Add early stopping to prevent wasting time without validation improvements
-    early_stop = EarlyStopping(monitor='val_loss', patience=15, restore_best_weights=True)
+    early_stop = EarlyStopping(monitor='val_loss', patience=30, restore_best_weights=True)
 
     # Tell the loss function to weigh the minority cases much more heavily
     weights = class_weight.compute_class_weight(
@@ -131,7 +128,7 @@ def train_model(X_train, y_train, X_val, y_val):
     return basic_model, history
 
 
-def evaluate_model(model, history, X_test, y_test):
+def evaluate_model(model, history, X_test, y_test, relevant_threshold_value, relevant_window_size):
     # Basic evaluation
     loss_and_metrics = model.evaluate(X_test, y_test)
     print(loss_and_metrics)
@@ -153,34 +150,22 @@ def evaluate_model(model, history, X_test, y_test):
     actual = np.array(y_test)
 
     # Identify optimal threshold to use
-    # best_f1, best_thresh = 0, 0
-    # for t in np.linspace(0.1, 0.9, 50):
-    #     pred = tf.cast(predicted_probabilities > t, tf.int32)
-    #     score = f1_score(actual, pred)
-    #     if score > best_f1:
-    #         best_f1, best_thresh = score, t
-    #
-    # print("Best Thresh:", best_thresh)
-    # print("Best F1 Score:", best_f1)
+    best_f1, best_thresh = 0, 0
+    for t in np.linspace(0.1, 0.9, 50):
+        pred = tf.cast(predicted_probabilities > t, tf.int32)
+        score = f1_score(actual, pred)
+        if score > best_f1:
+            best_f1, best_thresh = score, t
 
-    best_thresh = 0.42
+    print("Best Thresh:", best_thresh)
+    print("Best F1 Score:", best_f1)
+
+    # best_thresh = 0.42
     predicted = np.array([1 if x >= best_thresh else 0 for x in predicted_probabilities])  # arbitrary threshold
 
     print(classification_report(actual, predicted))  # includes precision, recall, F1
     print("AUC-ROC:", roc_auc_score(actual, predicted_probabilities))
     print("MCC:", matthews_corrcoef(actual, predicted))
-
-    # conf_mat = confusion_matrix(actual, predicted, normalize='true')
-    # labels = ["No Apnea", "Apnea"]
-    #
-    # disp = ConfusionMatrixDisplay(confusion_matrix=conf_mat, display_labels=labels)
-    # disp.plot()
-    #
-    # plt.title("Confusion Matrix")
-    # plt.xlabel("Predicted Label")
-    # plt.ylabel("True Label")
-    # plt.ioff()
-    # plt.show()
 
     # Compute raw confusion matrix and normalized one (row-wise)
     conf_mat_raw = confusion_matrix(actual, predicted)
@@ -201,7 +186,7 @@ def evaluate_model(model, history, X_test, y_test):
            yticklabels=labels,
            ylabel='Ground Truth',
            xlabel='Predicted',
-           title='')
+           title=f"{relevant_window_size} Window, {relevant_threshold_value} Threshold")
 
     # Rotate the tick labels and set alignment
     plt.setp(ax.get_xticklabels(), rotation=45, ha="right", rotation_mode="anchor")
@@ -224,7 +209,7 @@ def evaluate_model(model, history, X_test, y_test):
 
 
 if __name__ == "__main__":
-    X_train, X_val, X_test, y_train, y_val, y_test = load_data(config.path.EEG_ACC_features_labelled, 0.75)
+    full_data_path = os.path.join(config.path.EEG_ACC_features_labelled, 'EEG_ACC_features_labelled_ApneaThreshold0.01_ArousalThreshold0.01_window30/')
+    X_train, X_val, X_test, y_train, y_val, y_test = load_data(full_data_path, 0.75)
     model, history = train_model(X_train, y_train, X_test, y_test)
-    evaluate_model(model, history, X_test, y_test)
-
+    evaluate_model(model, history, X_test, y_test, relevant_threshold_value=0.01, relevant_window_size=30)

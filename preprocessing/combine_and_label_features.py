@@ -41,7 +41,7 @@ def remove_wake_rows(df):
     return df
 
 
-def label_apnea_events(df_features, df_events, min_overlap_fraction, window_length=30):
+def label_events(df_features, df_events, min_overlap_fraction, window_length=30):
     """
     Labels each row in the features table according to the events file (ex. apnea or no apnea)
     """
@@ -133,7 +133,7 @@ def process_features(ACC_EEG_feature_files: [str], event_label_files: [str], out
         df_acc_eeg = remove_wake_rows(df_acc_eeg)
 
         # Add columns labelling apnea events (or other events)
-        df_acc_eeg = label_apnea_events(df_acc_eeg, df_events, min_overlap_fraction=apnea_epoch_threshold)
+        df_acc_eeg = label_events(df_acc_eeg, df_events, min_overlap_fraction=apnea_epoch_threshold)
 
         # save file to output location
         filename = os.path.basename(acc_eeg_file).replace('_synced_features.csv',
@@ -142,26 +142,37 @@ def process_features(ACC_EEG_feature_files: [str], event_label_files: [str], out
         df_acc_eeg.to_csv(full_out, index=False)
 
 
+def main(window_size, thresholds: [float]):
+    """"""
+
+    for threshold in thresholds:
+        """OPTION 1 - combine features"""
+        acc_features_directory = os.path.join(config.path.ACC_features_directory,
+                                              f'ACC_features_window{window_size}_strideNA/')
+        eeg_features_directory = os.path.join(config.path.EEG_features_directory,
+                                              f'EEG_features_window{window_size}_strideNA/')
+        acc_files = sorted(glob.glob(acc_features_directory + '*_acc_features.csv'))
+        eeg_files = sorted(glob.glob(eeg_features_directory + '*_eeg_features.csv'))
+
+        output_folder = os.path.join(config.path.EEG_ACC_features, f"{window_size}s_windows/")
+        os.makedirs(output_folder, exist_ok=True)
+
+        combine_features(acc_files, eeg_files, output_folder)
+
+        """OPTION 2 - only process already combined features"""
+        features_path = os.path.join(config.path.EEG_ACC_features, f"{window_size}s_windows/")
+        eeg_acc_files = sorted(glob.glob(features_path + '*_synced_features.csv'))
+        event_files = sorted(glob.glob(config.path.raw_csv_directory + '*_events.csv'))
+
+        output_folder = config.path.EEG_ACC_features_labelled
+        os.makedirs(output_folder, exist_ok=True)
+
+        process_features(eeg_acc_files, event_files, output_folder, threshold, threshold, window_length=window_size)
+        process_features(eeg_acc_files, event_files, output_folder, threshold, threshold, window_length=window_size)
+
+
+
 if __name__ == '__main__':
-    """OPTION 1 - combine features"""
-    window_size = 10
-
-    acc_features_directory = os.path.join(config.path.ACC_features_directory, f'ACC_features_window{window_size}_strideNA/')
-    eeg_features_directory = os.path.join(config.path.EEG_features_directory, f'EEG_features_window{window_size}_strideNA/')
-    acc_files = sorted(glob.glob(acc_features_directory + '*_acc_features.csv'))
-    eeg_files = sorted(glob.glob(eeg_features_directory + '*_eeg_features.csv'))
-
-    output_folder = os.path.join(config.path.EEG_ACC_features, f"{window_size}s_windows/")
-    os.makedirs(output_folder, exist_ok=True)
-
-    combine_features(acc_files, eeg_files, output_folder)
-
-    """OPTION 2 - only process already combined features"""
-    features_path = os.path.join(config.path.EEG_ACC_features, f"{window_size}s_windows/")
-    eeg_acc_files = sorted(glob.glob(features_path + '*_synced_features.csv'))
-    event_files = sorted(glob.glob(config.path.raw_csv_directory + '*_events.csv'))
-
-    output_folder = config.path.EEG_ACC_features_labelled
-    os.makedirs(output_folder, exist_ok=True)
-
-    process_features(eeg_acc_files, event_files, output_folder, 0.30, 0.30, window_length=window_size)
+    main(1, [0.95])
+    main(10, [0.3, 0.5, 0.75])
+    main(30, [0.3, 0.5, 0.75])
