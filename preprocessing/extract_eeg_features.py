@@ -240,10 +240,16 @@ def ceildiv(a, b):
 
 def obtain_sw_sp_compatible_chunks(df, start_time, window_size, sampling_rate=256):
     """
+    Assumes features will never be extracted for epochs/windows of > 30 seconds. Always <= 30s.
+
     Yasa's sw and sp detection require data chunks of AT LEAST 30 seconds duration (see logic below, sometimes could
     be a second or two longer)
     This function calculates chunks that have the same middle timestamp as the properly windowed chunks, but
     have durations of 30 seconds.
+
+    Example: we want to extract features at 1Hz, but sleep spindle count can only be obtained with Yasa from a 30s
+    window. We still extract features at 1Hz, but we specifically grab a 30s chunk around that 1s window only to
+    use for sleep spindle count calculations. So each second has that 30s surrounding average as its value.
     """
 
     first_second = df['ts'].iloc[0]
@@ -275,9 +281,11 @@ def obtain_bandpower_compatible_chunks(df, start_time, window_size, sampling_rat
     less than 5s, in which case it always uses minimum 5s -- for appropriate bandpower calculations.
     """
 
+    # Define first and last seconds in the entire dataset
     first_second = df['ts'].iloc[0]
     last_second = df['ts'].iloc[-1]
 
+    # Calculate some values that will help with our calculations
     half_window = window_size / 2
     middle_of_chunk = start_time + half_window # NOTE THIS CAN BE A FLOAT CURRENTLY
 
@@ -286,21 +294,22 @@ def obtain_bandpower_compatible_chunks(df, start_time, window_size, sampling_rat
     else:
         bandpower_window_size = window_size
 
-    if middle_of_chunk - 15 < first_second:  # If the start of the 30s window is cut off
-        sp_sw_start_time = first_second
-        sp_sw_end_time = first_second + bandpower_window_size
-    elif middle_of_chunk + 15 > last_second:  # If the end of the 30s window is cut off
-        sp_sw_start_time = last_second - bandpower_window_size
-        sp_sw_end_time = last_second
-    else:  # If nothing is cut off and the 30s window extends cleanly 15s from the middle of the chunk
-        sp_sw_start_time = math.floor(middle_of_chunk - bandpower_window_size/2)
-        sp_sw_end_time = math.ceil(middle_of_chunk + bandpower_window_size/2)
+    # Calculate the start and end of a chunk centered on the middle of the window_size window,
+    # with bandpower_window_size length.
+    if middle_of_chunk - bandpower_window_size/2 < first_second:  # If the start of the 5s window is cut off
+        bandpower_start_time = first_second
+        bandpower_end_time = first_second + bandpower_window_size
+    elif middle_of_chunk + bandpower_window_size/2 > last_second:  # If the end of the 5s window is cut off
+        bandpower_start_time = last_second - bandpower_window_size
+        bandpower_end_time = last_second
+    else:  # If nothing is cut off and the 5s window extends cleanly 2.5s from the middle of the chunk in each dir.
+        bandpower_start_time = middle_of_chunk - bandpower_window_size/2
+        bandpower_end_time = middle_of_chunk + bandpower_window_size/2
 
-    # Slice out appropriate chunk of data that is at least 30s no matter what
-    sp_sw_chunk = df[(df['ts'] >= sp_sw_start_time) & (df['ts'] <= sp_sw_end_time)]
+    # Slice out appropriate chunk of data that is at least 5s for bandpower calculations
+    bandpower_chunk = df[(df['ts'] >= bandpower_start_time) & (df['ts'] < bandpower_end_time)]
 
-    return sp_sw_chunk
-
+    return bandpower_chunk
 
 
 def compute_eeg_features_for_window(df, df_label_time, sampling_rate=256):
@@ -326,7 +335,7 @@ def compute_eeg_features_for_window(df, df_label_time, sampling_rate=256):
     for ch in ['ch1', 'ch2', 'ch3', 'ch4']:
         filtered_df[ch] = butter_bandpass_filter(filtered_df[ch], lowcut, highcut, sampling_rate)
 
-    # Compute relevant features for each window of data. Leveraging parallel processing.
+    # Compute relevant features for each window of data.
     for i in range(len(start_times) - 1):
         chunk = filtered_df[(filtered_df['ts'] >= start_times[i]) & (filtered_df['ts'] < start_times[i + 1])]
         sp_sw_chunk = obtain_sw_sp_compatible_chunks(filtered_df, start_times[i], window_size=window_size)
@@ -384,6 +393,10 @@ def resample_sleep_staging(df, new_window_size, stride):
         df_resampled = df_resampled.reset_index(drop=True)
         df_resampled['name'] = df_resampled['name'].fillna(0).astype(int)
 
+        # Cut off first and last rows to eliminate edge noise (they rarely fit nicely into new_window_size windows and
+        # as a result often have skewed calculations. it's best to keep all windows actually correct size)
+        df_resampled = df_resampled.iloc[1:-1]
+
         return df_resampled
     else:
         raise Exception("Does not currently support sliding windows. Slide must be -1")
@@ -427,7 +440,7 @@ def extract_and_save_features_for_recording(file, staging_file, output_folder, e
 def extract_eeg_features(source_files_path, output_path, window_size=30, stride=None):
     """
     Note window size must always be a factor or multiple of 30, otherwise sleep stages shown in
-    extracted features may be inaccurate.
+    extracted features may be inaccurate. Note window size > 30 might break things, but I forget why exactly.
 
     :param source_files_path: path to directory containing synced _acc, _eeg, _ppg, and _staging2 .csv files
     :param output_path: directory where output folder (with extracted features) will be created and saved
@@ -476,8 +489,5 @@ def extract_eeg_features(source_files_path, output_path, window_size=30, stride=
 
 
 if __name__ == "__main__":
-    extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=20,
+    extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=30,
                          stride=None)
-    extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=15,
-                         stride=None)
-    extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=5, stride=None)

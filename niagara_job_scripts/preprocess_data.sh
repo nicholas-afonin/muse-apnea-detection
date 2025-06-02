@@ -16,4 +16,8 @@ export MPLCONFIGDIR=/scratch/a/alim/afoninni/tmp  # also a small fix (this one i
 export OMP_NUM_THREADS=1
 export NUMBA_NUM_THREADS=1
 
-python EEG_features_April_2025.py
+export PYTHONPATH=..  # Set the working path directory to the project root so files like config can be accessed.
+
+python extract_acc_features.py
+python extract_eeg_features.py
+python combine_and_label_features.py

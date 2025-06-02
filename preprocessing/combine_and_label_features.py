@@ -43,10 +43,14 @@ def remove_wake_rows(df):
 
 def label_events(df_features, df_events, min_overlap_fraction, window_length=30):
     """
-    Labels each row in the features table according to the events file (ex. apnea or no apnea)
+    Labels rows in the features table according to the events file (ex. apnea or no apnea)
+
+    For example, if we want an 'apnea_event' column added to the features table, this function
+    checks the events file for any apnea-related events and sets 'apnea_event' for the rows whose time
+    intervals overlap with apnea-related events.
     """
 
-    # Labels for the final table, and which 'input labels' are mapped to them
+    # Columns for the final table, and which 'event labels' are mapped to them
     # in this case, all apnea-related events are simply mapped to the 'apnea_event' column
     event_map = {'apnea_event': ['Hypopnea', 'Obstructive Apnea', 'Mixed Apnea', 'Central Apnea'],
                  'arousal_event': ['RERA', 'Arousal (ARO RES)', 'Arousal (ARO SPONT)']}
@@ -55,8 +59,8 @@ def label_events(df_features, df_events, min_overlap_fraction, window_length=30)
     df_events = df_events.copy()
     df_events["end"] = df_events["start"] + df_events["duration"]
 
-    # Determine minimum threshold for overlap (if the event takes up more than x seconds
-    # of an epoch, label with 1)
+    # Determine minimum threshold for overlap (if the event takes up more than min_overlap_sec
+    # of an epoch, set to 1)
     min_overlap_sec = min_overlap_fraction * window_length
 
     # Prepare output column(s)
@@ -104,7 +108,7 @@ def combine_features(ACC_feature_files, EEG_feature_files, output_directory):
         print(f"Now combining > {acc_file.split('/')[-1]}: {len(df_acc)} rows")
 
         # Combine acc and eeg features
-        df_acc_eeg = pd.concat([df_acc, df_eeg], axis=1)
+        df_acc_eeg = pd.concat([df_eeg, df_acc], axis=1)
 
         # Save output
         filename = os.path.basename(acc_file).replace('_synced_acc_features.csv',
@@ -145,21 +149,21 @@ def process_features(ACC_EEG_feature_files: [str], event_label_files: [str], out
 def main(window_size, thresholds: [float]):
     """"""
 
+    """1 - combine features"""
+    acc_features_directory = os.path.join(config.path.ACC_features_directory,
+                                          f'ACC_features_window{window_size}_strideNA/')
+    eeg_features_directory = os.path.join(config.path.EEG_features_directory,
+                                          f'EEG_features_window{window_size}_strideNA/')
+    acc_files = sorted(glob.glob(acc_features_directory + '*_acc_features.csv'))
+    eeg_files = sorted(glob.glob(eeg_features_directory + '*_eeg_features.csv'))
+
+    output_folder = os.path.join(config.path.EEG_ACC_features, f"{window_size}s_windows/")
+    os.makedirs(output_folder, exist_ok=True)
+
+    combine_features(acc_files, eeg_files, output_folder)
+
+    """2 - process & label already combined features for various thresholds"""
     for threshold in thresholds:
-        """OPTION 1 - combine features"""
-        acc_features_directory = os.path.join(config.path.ACC_features_directory,
-                                              f'ACC_features_window{window_size}_strideNA/')
-        eeg_features_directory = os.path.join(config.path.EEG_features_directory,
-                                              f'EEG_features_window{window_size}_strideNA/')
-        acc_files = sorted(glob.glob(acc_features_directory + '*_acc_features.csv'))
-        eeg_files = sorted(glob.glob(eeg_features_directory + '*_eeg_features.csv'))
-
-        output_folder = os.path.join(config.path.EEG_ACC_features, f"{window_size}s_windows/")
-        os.makedirs(output_folder, exist_ok=True)
-
-        combine_features(acc_files, eeg_files, output_folder)
-
-        """OPTION 2 - only process already combined features"""
         features_path = os.path.join(config.path.EEG_ACC_features, f"{window_size}s_windows/")
         eeg_acc_files = sorted(glob.glob(features_path + '*_synced_features.csv'))
         event_files = sorted(glob.glob(config.path.raw_csv_directory + '*_events.csv'))
@@ -168,11 +172,7 @@ def main(window_size, thresholds: [float]):
         os.makedirs(output_folder, exist_ok=True)
 
         process_features(eeg_acc_files, event_files, output_folder, threshold, threshold, window_length=window_size)
-        process_features(eeg_acc_files, event_files, output_folder, threshold, threshold, window_length=window_size)
-
 
 
 if __name__ == '__main__':
-    main(1, [0.95])
-    main(10, [0.3, 0.5, 0.75])
-    main(30, [0.3, 0.5, 0.75])
+    main(30, [0.01, 0.5, 0.75])

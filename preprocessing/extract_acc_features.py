@@ -4,11 +4,12 @@ stride distance if a sliding window (overlapping windows) is preferred.
 Currently, sliding windows are not implemented.
 """
 
+import sys
+import os
+import config
 import pandas as pd
 import glob
 import numpy as np
-import os
-import config
 from scipy.fft import fft
 from joblib import Parallel, delayed
 
@@ -20,7 +21,7 @@ else:
     print(f"{CPU_CORES_AVAILABLE} CPU cores available")
 
 
-def compute_features(df, df_label_time, threshold=0.0, cutoff_freq=0.5, window_size=30):
+def compute_features(df, df_label_time, threshold=0.0, cutoff_freq=0.5):
     # Check if required columns are present in the input dataframe
     required_columns = ['ts', 'ch1', 'ch2', 'ch3']
     for col in required_columns:
@@ -38,7 +39,7 @@ def compute_features(df, df_label_time, threshold=0.0, cutoff_freq=0.5, window_s
     names = df_label_time['name'].tolist()
 
     for i in range(len(start_times) - 1):
-        chunk = df[(df['ts'] >= start_times[i]) & (df['ts'] < (start_times[i] + window_size))]
+        chunk = df[(df['ts'] >= start_times[i]) & (df['ts'] < start_times[i + 1])]
 
         # Check if the chunk is empty
         if chunk.empty:
@@ -177,12 +178,16 @@ def resample_sleep_staging(df, new_window_size, stride):
         df_resampled = df_resampled.reset_index(drop=True)
         df_resampled['name'] = df_resampled['name'].fillna(0).astype(int)
 
+        # Cut off first and last rows to eliminate edge noise (they rarely fit nicely into 30s windows and
+        # as a result have skewed numbers)
+        df_resampled = df_resampled.iloc[1:-1]
+
         return df_resampled
     else:
         raise Exception("Does not currently support sliding windows. Slide must be -1")
 
 
-def combine_acc_features_from_file(file, staging_file, output_path, threshold=0.0, window_size=30, stride=None):
+def combine_acc_features_from_file(file, staging_file, output_path, window_size, threshold=0.0, stride=None):
     output_file_name = os.path.join(output_path, f"{os.path.basename(file).replace('_acc.csv', '_acc_features.csv')}")
 
     # Check if the output file already exists
@@ -200,7 +205,7 @@ def combine_acc_features_from_file(file, staging_file, output_path, threshold=0.
     df_label_time = resample_sleep_staging(df_label_time, new_window_size=window_size, stride=stride)
 
     # Compute features for chunks based on start times from df_label_time
-    features = compute_features(df, df_label_time, threshold)
+    features = compute_features(df, df_label_time, threshold=threshold)
 
     # Generate an output file name
     output_file_name = os.path.join(output_path, f"{os.path.basename(file).replace('_acc.csv', '_acc_features.csv')}")
@@ -210,7 +215,7 @@ def combine_acc_features_from_file(file, staging_file, output_path, threshold=0.
     print(f"Saved features to: {output_file_name}")
 
 
-def extract_acc_features(source_files_path, output_path, window_size=30, stride=None):
+def extract_acc_features(source_files_path, output_path, window_size, stride=None):
     """
     Note window size must always be a factor or multiple of 30, otherwise sleep stages shown in
     extracted features may be inaccurate.
@@ -241,13 +246,5 @@ def extract_acc_features(source_files_path, output_path, window_size=30, stride=
     Parallel(n_jobs=CPU_CORES_AVAILABLE - 1)(delayed(combine_acc_features_from_file)(acc_file, staging_file, output_path, threshold=0.0, window_size=window_size, stride=stride) for acc_file, staging_file in zip(acc_files, staging_files))
 
 if __name__ == '__main__':
-    extract_acc_features(config.path.synced_csv_directory, config.path.ACC_features_directory, window_size=20,
-                         stride=None)
-    extract_acc_features(config.path.synced_csv_directory, config.path.ACC_features_directory, window_size=15,
-                         stride=None)
-    extract_acc_features(config.path.synced_csv_directory, config.path.ACC_features_directory, window_size=10,
-                         stride=None)
-    extract_acc_features(config.path.synced_csv_directory, config.path.ACC_features_directory, window_size=5,
-                         stride=None)
-    extract_acc_features(config.path.synced_csv_directory, config.path.ACC_features_directory, window_size=1,
+    extract_acc_features(config.path.synced_csv_directory, config.path.ACC_features_directory, window_size=30,
                          stride=None)
