@@ -18,4 +18,4 @@ export NUMBA_NUM_THREADS=1
 
 export PYTHONPATH=..  # Set the working path directory to the project root so files like config can be accessed.
 
-python extract_acc_features.py
+python extract_eeg_features.py
