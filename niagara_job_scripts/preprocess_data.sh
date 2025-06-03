@@ -4,8 +4,8 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=40
-#SBATCH --output=/scratch/a/alim/afoninni/muse/preprocessing_eeg.out
-#SBATCH --error=/scratch/a/alim/afoninni/muse/preprocessing_eeg.err
+#SBATCH --output=/scratch/a/alim/afoninni/muse/preprocessing_eeg2.out
+#SBATCH --error=/scratch/a/alim/afoninni/muse/preprocessing_eeg2.err
 
 
 source /home/a/alim/afoninni/.virtualenvs/env2/bin/activate

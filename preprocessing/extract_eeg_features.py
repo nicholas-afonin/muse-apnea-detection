@@ -489,5 +489,7 @@ def extract_eeg_features(source_files_path, output_path, window_size=30, stride=
 
 
 if __name__ == "__main__":
-    extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=1,
+    extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=5,
+                         stride=None)
+    extract_eeg_features(config.path.synced_csv_directory, config.path.EEG_features_directory, window_size=10,
                          stride=None)
