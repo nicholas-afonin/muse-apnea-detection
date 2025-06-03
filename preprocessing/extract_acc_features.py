@@ -246,5 +246,6 @@ def extract_acc_features(source_files_path, output_path, window_size, stride=Non
     Parallel(n_jobs=CPU_CORES_AVAILABLE - 1)(delayed(combine_acc_features_from_file)(acc_file, staging_file, output_path, threshold=0.0, window_size=window_size, stride=stride) for acc_file, staging_file in zip(acc_files, staging_files))
 
 if __name__ == '__main__':
-    extract_acc_features(config.path.synced_csv_directory, config.path.ACC_features_directory, window_size=30,
-                         stride=None)
+    for i in [1, 5, 10, 15, 20, 25]:
+        extract_acc_features(config.path.synced_csv_directory, config.path.ACC_features_directory, window_size=i,
+                             stride=None)
