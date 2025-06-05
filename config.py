@@ -37,6 +37,9 @@ class path:
         EEG_ACC_features = r"C:\Users\aweso\Desktop\Sunnybrook\MUSE\Data\EEG_ACC_features_June2025/"
         EEG_ACC_features_labelled = r"C:\Users\aweso\Desktop\Sunnybrook\MUSE\Data\EEG_ACC_features_labelled/"
 
+        dataset_statistics = r"C:\Users\aweso\Desktop\Sunnybrook\MUSE\Data\dataset_statistics/"
+        apnea_model_directory = r"C:\Users\aweso\Desktop\Sunnybrook\MUSE\Data\apnea_model/"
+
     else:
         raw_csv_directory = "/scratch/a/alim/afoninni/muse/MUSE-PSG/"
         synced_csv_directory = "/scratch/a/alim/afoninni/muse/muse_synced/"
@@ -44,3 +47,6 @@ class path:
         EEG_features_directory = "/scratch/a/alim/afoninni/muse/EEG_features/"
         EEG_ACC_features = "/scratch/a/alim/afoninni/muse/EEG_ACC_features_June2025/"
         EEG_ACC_features_labelled = "/scratch/a/alim/afoninni/muse/EEG_ACC_features_labelled_June2025/"
+
+        dataset_statistics = "/scratch/a/alim/afoninni/muse/dataset_statistics/"
+        apnea_model_directory = "/scratch/a/alim/afoninni/muse/models/apnea/"
