@@ -18,4 +18,4 @@ export NUMBA_NUM_THREADS=1
 
 export PYTHONPATH=..  # Set the working path directory to the project root so files like config can be accessed.
 
-python combine_and_label_features.py
+python event_statistics.py
