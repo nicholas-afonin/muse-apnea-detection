@@ -277,10 +277,10 @@ def main(threshold, window_size, train_val_test_ratio: (float, float, float), mo
 
 
 if __name__ == "__main__":
-    # for thresh in [0.01, 0.25, 0.5, 0.75, 0.95]:
-    #     for window in [1, 5, 10, 15, 20, 25, 30]:
-    #         main(thresh, window, (0.70, 0, 0.15), evaluate_only=False, model_name=f"{thresh}_thresh_{window}s_window")
+    for thresh in [0.01, 0.25, 0.5, 0.75, 0.95]:
+        for window in [1, 5, 10, 15, 20, 25, 30]:
+            main(thresh, window, (0.70, 0, 0.15), evaluate_only=False, model_name=f"{thresh}_thresh_{window}s_window")
 
-    window = 30
-    thresh = 0.01
-    main(thresh, window, (0.70, 0, 0.15), evaluate_only=False, model_name=f"{thresh}_thresh_{window}s_window")
+    # window = 30
+    # thresh = 0.01
+    # main(thresh, window, (0.70, 0, 0.15), evaluate_only=False, model_name=f"{thresh}_thresh_{window}s_window")
