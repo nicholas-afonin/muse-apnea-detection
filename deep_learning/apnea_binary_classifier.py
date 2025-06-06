@@ -295,11 +295,13 @@ if __name__ == "__main__":
             combinations.append((thresh, window))
 
 
+    for combination in combinations:
+        simple_training_wrapper(combination)
     # Prepare to apply parallel processing so that we don't take forever to run the job
     # simply runs the simple training wrapper on all possible combinations of thresholds and window sizes,
     # but does it in parallel so we don't spend 10 years here.
-    cpus = int(os.environ.get('SLURM_CPUS_PER_TASK', default=1))
-    pool = mp.Pool(processes=cpus)
-    data = pool.map(simple_training_wrapper, combinations)
-    pool.close()
-    pool.join()
+    # cpus = int(os.environ.get('SLURM_CPUS_PER_TASK', default=1))
+    # pool = mp.Pool(processes=cpus)
+    # data = pool.map(simple_training_wrapper, combinations)
+    # pool.close()
+    # pool.join()
