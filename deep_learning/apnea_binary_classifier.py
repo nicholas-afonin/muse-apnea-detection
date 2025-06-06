@@ -212,15 +212,11 @@ if __name__ == "__main__":
 
     # Iterate over all possible datasets and create a list
     combinations = []
-    for thresh in [0.01, 0.25, 0.5, 0.75, 0.95]:
-        for window in [1, 5, 10, 15, 20, 25, 30]:
-            combinations.append((thresh, window))
-
-    for combination in combinations:
-        simple_training_wrapper(combination)
+    for window in [30, 25, 20, 15, 10, 5, 1]:
+        for thresh in [0.01, 0.25, 0.5, 0.75, 0.95]:
+            simple_training_wrapper((thresh, window))
 
     # simple_training_wrapper((0.5, 30))
-
     # Prepare to apply parallel processing so that we don't take forever to run the job
     # simply runs the simple training wrapper on all possible combinations of thresholds and window sizes,
     # but does it in parallel so we don't spend 10 years here.
