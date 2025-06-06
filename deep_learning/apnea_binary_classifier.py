@@ -210,16 +210,16 @@ def simple_training_wrapper(dataset_to_train_on):
 
 if __name__ == "__main__":
 
-    # # Iterate over all possible datasets and create a list
-    # combinations = []
-    # for thresh in [0.01, 0.25, 0.5, 0.75, 0.95]:
-    #     for window in [1, 5, 10, 15, 20, 25, 30]:
-    #         combinations.append((thresh, window))
-    #
-    # for combination in combinations:
-    #     simple_training_wrapper(combination)
+    # Iterate over all possible datasets and create a list
+    combinations = []
+    for thresh in [0.01, 0.25, 0.5, 0.75, 0.95]:
+        for window in [1, 5, 10, 15, 20, 25, 30]:
+            combinations.append((thresh, window))
 
-    simple_training_wrapper((0.5, 30))
+    for combination in combinations:
+        simple_training_wrapper(combination)
+
+    # simple_training_wrapper((0.5, 30))
 
     # Prepare to apply parallel processing so that we don't take forever to run the job
     # simply runs the simple training wrapper on all possible combinations of thresholds and window sizes,
