@@ -4,8 +4,8 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=40
-#SBATCH --output=/scratch/a/alim/afoninni/muse/benching_1.out
-#SBATCH --error=/scratch/a/alim/afoninni/muse/benching_1.err
+#SBATCH --output=/scratch/a/alim/afoninni/muse/benching_2.out
+#SBATCH --error=/scratch/a/alim/afoninni/muse/benching_2.err
 
 
 source /home/a/alim/afoninni/.virtualenvs/env3/bin/activate
