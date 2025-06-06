@@ -1,11 +1,11 @@
 #!/bin/bash
 #SBATCH --job-name=muse_model_training
-#SBATCH --time=10:00:00
+#SBATCH --time=24:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=40
-#SBATCH --output=/scratch/a/alim/afoninni/muse/model_training.out
-#SBATCH --error=/scratch/a/alim/afoninni/muse/model_training.err
+#SBATCH --output=/scratch/a/alim/afoninni/muse/benching_1.out
+#SBATCH --error=/scratch/a/alim/afoninni/muse/benching_1.err
 
 
 source /home/a/alim/afoninni/.virtualenvs/env3/bin/activate
