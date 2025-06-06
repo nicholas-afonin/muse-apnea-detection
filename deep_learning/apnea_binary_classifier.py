@@ -20,6 +20,7 @@ import glob
 import os
 import pickle
 import json
+import multiprocessing as mp
 
 
 """ -------------------------------------- HELPER FUNCS -------------------------------------- """
@@ -276,11 +277,29 @@ def main(threshold, window_size, train_val_test_ratio: (float, float, float), mo
                    relevant_window_size=window_size)
 
 
+def simple_training_wrapper(dataset_to_train_on):
+    threshold = dataset_to_train_on[0]
+    window = dataset_to_train_on[1]
+    train_val_test_ratio = (0.70, 0, 0.15)
+    model_name = f"{threshold}_thresh_{window}s_window"
+
+    main(threshold, window, train_val_test_ratio, model_name, evaluate_only=False)
+
+
 if __name__ == "__main__":
+
+    # Iterate over all possible datasets and create a list
+    combinations = []
     for thresh in [0.01, 0.25, 0.5, 0.75, 0.95]:
         for window in [1, 5, 10, 15, 20, 25, 30]:
-            main(thresh, window, (0.70, 0, 0.15), evaluate_only=False, model_name=f"{thresh}_thresh_{window}s_window")
+            combinations.append((thresh, window))
 
-    # window = 30
-    # thresh = 0.01
-    # main(thresh, window, (0.70, 0, 0.15), evaluate_only=False, model_name=f"{thresh}_thresh_{window}s_window")
+
+    # Prepare to apply parallel processing so that we don't take forever to run the job
+    # simply runs the simple training wrapper on all possible combinations of thresholds and window sizes,
+    # but does it in parallel so we don't spend 10 years here.
+    cpus = int(os.environ.get('SLURM_CPUS_PER_TASK', default=1))
+    pool = mp.Pool(processes=cpus)
+    data = pool.map(simple_training_wrapper, combinations)
+    pool.close()
+    pool.join()
