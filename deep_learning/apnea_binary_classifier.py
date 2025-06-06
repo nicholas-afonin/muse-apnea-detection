@@ -21,6 +21,7 @@ import os
 import pickle
 import json
 import multiprocessing as mp
+from diagnostics.evaluation_helper import *
 
 
 """ -------------------------------------- HELPER FUNCS -------------------------------------- """
@@ -128,7 +129,7 @@ def train_model(X_train, y_train, X_val, y_val, save_as: str):
     # Train model
     history = basic_model.fit(
         X_train, y_train,
-        epochs=100,
+        epochs=3,
         validation_data=(X_val, y_val),
         verbose=1,
         callbacks=[early_stop],
@@ -146,115 +147,36 @@ def train_model(X_train, y_train, X_val, y_val, save_as: str):
         pickle.dump(history.history, f)
 
 
-def evaluate_model(X_test, y_test, X_val, y_val, load_as: str, relevant_threshold_value, relevant_window_size):
+def evaluate_model(X, y, load_as: str, relevant_threshold_value, relevant_window_size):
     # Load model and training history
     model = load_model(os.path.join(config.path.apnea_model_directory, load_as, "model.keras"))  # "apnea_model/load_as/model.keras"
     with open(os.path.join(config.path.apnea_model_directory, load_as, "history.pkl"), "rb") as f:  # "apnea_model/load_as/history.pkl"
         history = pickle.load(f)
 
-    # Basic evaluation
-    loss_and_metrics = model.evaluate(X_test, y_test)
-    print(loss_and_metrics)
-    print('Loss = ', loss_and_metrics)
-
-    # Plot training & validation loss
-    plt.plot(history['loss'], label='Training Loss')
-    plt.plot(history['val_loss'], label='Validation Loss')
-    plt.title('Model Loss Over Epochs')
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
-    plt.legend()
-    plt.grid(True)
-
-    # SAVE TRAINING LOSS PLOT
+    # Set directory to which we'll save everything
     save_dir = os.path.join(config.path.apnea_model_directory, load_as)
     os.makedirs(save_dir, exist_ok=True)
-    loss_plot_path = os.path.join(save_dir, f"training_and_validation_loss.png")
-    plt.savefig(loss_plot_path)
-    plt.close()
 
-    # Get predictions, performance metrics, and confusion matrix FOR VALIDATION
-    val_predicted_probabilities = model.predict(X_val)
-    val_predicted_probabilities = tf.squeeze(val_predicted_probabilities)
-    val_actual = np.array(y_val)
+    # Plot training history
+    plot_training_history(history, save_dir)
 
-    # Identify optimal threshold to use for considering a model output an apnea prediction (>0.5 confidence means
-    # it's an apnea for example)
-    best_f1, best_thresh = 0, 0
-    for t in np.linspace(0.1, 0.9, 50):
-        pred = tf.cast(val_predicted_probabilities > t, tf.int32)
-        score = f1_score(val_actual, pred)
-        if score > best_f1:
-            best_f1, best_thresh = score, t
+    # Get arrays for predicted events and actual events
+    predicted_probabilities = tf.squeeze(model.predict(X))
+    actual = np.array(y)
+    predicted = np.array([1 if x >= 0.50 else 0 for x in predicted_probabilities])  # arbitrary threshold
 
-    print("Best Thresh:", best_thresh)
-    print("Best F1 Score:", best_f1)
-    best_thresh = 0.50
+    # Plot confusion matrix
+    title = f"{relevant_window_size} Window, {relevant_threshold_value} Threshold"
+    plot_confusion_matrix(actual, predicted, title, save_dir)
 
-    # Get predictions, performance metrics, and confusion matrix for testing
-    predicted_probabilities = model.predict(X_val)
-    predicted_probabilities = tf.squeeze(predicted_probabilities)
-    actual = np.array(y_val)
-
-    predicted = np.array([1 if x >= best_thresh else 0 for x in predicted_probabilities])  # arbitrary threshold
-
-    print(classification_report(actual, predicted))  # includes precision, recall, F1
-    print("AUC-ROC:", roc_auc_score(actual, predicted_probabilities))
-    print("MCC:", matthews_corrcoef(actual, predicted))
-
-    # Compute raw confusion matrix and normalized one (row-wise)
-    conf_mat_raw = confusion_matrix(actual, predicted)
-    conf_mat_norm = confusion_matrix(actual, predicted, normalize='true')  # normalize by row
-
-    labels = ["No Apnea", "Apnea"]
-    n_classes = len(labels)
-
-    # Set up figure
-    fig, ax = plt.subplots()
-    im = ax.imshow(conf_mat_norm, interpolation='nearest', cmap='Blues')
-    ax.figure.colorbar(im, ax=ax)
-
-    # Set ticks and labels
-    ax.set(xticks=np.arange(n_classes),
-           yticks=np.arange(n_classes),
-           xticklabels=labels,
-           yticklabels=labels,
-           ylabel='Ground Truth',
-           xlabel='Predicted',
-           title=f"{relevant_window_size} Window, {relevant_threshold_value} Threshold")
-
-    # Rotate the tick labels and set alignment
-    plt.setp(ax.get_xticklabels(), rotation=45, ha="right", rotation_mode="anchor")
-
-    # Annotate each cell with count and percentage
-    fmt = '.1f'
-    thresh = conf_mat_norm.max() / 2.
-
-    for i in range(n_classes):
-        for j in range(n_classes):
-            count = conf_mat_raw[i, j]
-            percent = conf_mat_norm[i, j] * 100
-            ax.text(j, i, f"{count}\n({percent:.1f}%)",
-                    ha="center", va="center",
-                    color="white" if conf_mat_norm[i, j] > thresh else "black")
-
-    fig.tight_layout()
-    plt.ioff()
-
-    # SAVE PLOT instead of displaying
-    save_dir = os.path.join(config.path.apnea_model_directory, load_as)
-    os.makedirs(save_dir, exist_ok=True)
-    plot_path = os.path.join(save_dir, f"confusion_matrix.png")
-    fig.savefig(plot_path)
-    plt.close(fig)
-
-    # Save calculated metrics
+    # Calculate and save metrics
+    from sklearn.metrics import f1_score, precision_score, recall_score
     metrics = {
-        "best_threshold": float(best_thresh),
-        "best_f1": float(best_f1),
         "roc_auc": float(roc_auc_score(actual, predicted_probabilities)),
         "mcc": float(matthews_corrcoef(actual, predicted)),
-        "classification_report": classification_report(actual, predicted, output_dict=True)
+        "f1": float(f1_score(actual, predicted, average="binary", pos_label=1)),
+        "precision": float(precision_score(actual, predicted, average="binary", pos_label=1)),
+        "recall": float(recall_score(actual, predicted, average="binary", pos_label=1))
     }
 
     metrics_path = os.path.join(save_dir, f"metrics.json")
@@ -273,7 +195,7 @@ def main(threshold, window_size, train_val_test_ratio: (float, float, float), mo
         train_model(X_train, y_train, X_val, y_val, save_as=model_name)
 
     # Evaluate the model
-    evaluate_model(X_test, y_test, X_val, y_val, load_as=model_name, relevant_threshold_value=threshold,
+    evaluate_model(X_test, y_test, load_as=model_name, relevant_threshold_value=threshold,
                    relevant_window_size=window_size)
 
 
@@ -288,15 +210,17 @@ def simple_training_wrapper(dataset_to_train_on):
 
 if __name__ == "__main__":
 
-    # Iterate over all possible datasets and create a list
-    combinations = []
-    for thresh in [0.01, 0.25, 0.5, 0.75, 0.95]:
-        for window in [1, 5, 10, 15, 20, 25, 30]:
-            combinations.append((thresh, window))
+    # # Iterate over all possible datasets and create a list
+    # combinations = []
+    # for thresh in [0.01, 0.25, 0.5, 0.75, 0.95]:
+    #     for window in [1, 5, 10, 15, 20, 25, 30]:
+    #         combinations.append((thresh, window))
+    #
+    # for combination in combinations:
+    #     simple_training_wrapper(combination)
 
+    simple_training_wrapper((0.5, 30))
 
-    for combination in combinations:
-        simple_training_wrapper(combination)
     # Prepare to apply parallel processing so that we don't take forever to run the job
     # simply runs the simple training wrapper on all possible combinations of thresholds and window sizes,
     # but does it in parallel so we don't spend 10 years here.
