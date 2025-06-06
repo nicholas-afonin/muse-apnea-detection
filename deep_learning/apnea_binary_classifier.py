@@ -129,7 +129,7 @@ def train_model(X_train, y_train, X_val, y_val, save_as: str):
     # Train model
     history = basic_model.fit(
         X_train, y_train,
-        epochs=3,
+        epochs=100,
         validation_data=(X_val, y_val),
         verbose=1,
         callbacks=[early_stop],
