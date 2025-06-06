@@ -3,7 +3,11 @@ import config
 import os
 from sklearn.metrics import confusion_matrix
 import numpy as np
-
+import os
+import json
+import re
+from pathlib import Path
+import pandas as pd
 
 
 def plot_training_history(history, save_dir):
@@ -73,3 +77,104 @@ def plot_confusion_matrix(actual, predicted, title, save_dir):
     plot_path = os.path.join(save_dir, f"confusion_matrix.png")
     fig.savefig(plot_path)
     plt.close(fig)
+
+
+def plot_grid_search_results(
+        results_directory: str | Path,
+        metrics: tuple[str, ...] = ("f1",),
+        save_figures: bool = False,
+        dpi: int = 200,
+):
+    """
+    Crawl a directory laid out like
+        0.01_thresh_10s_window/
+            ├─ metrics.json
+            └─ ...
+        0.01_thresh_15s_window/
+        0.50_thresh_30s_window/
+        ...
+    and create a heat-map-style grid for each requested metric.
+
+    Parameters
+    ----------
+    results_directory : str | Path
+        Root folder containing all result sub-folders.
+    metrics : tuple[str, ...], default ("f1",)
+        Which keys from `metrics.json` you’d like to visualise.
+    save_figures : bool, default False
+        If True, writes a PNG next to `results_directory` for each metric.
+    dpi : int, default 200
+        Resolution for saved figures.
+    """
+    results_directory = Path(results_directory).expanduser().resolve()
+    pattern = re.compile(r"(?P<thresh>[0-9.]+)_thresh_(?P<win>\d+)s_window")
+
+    # --------------------------- 1. Load all metrics --------------------------
+    rows = []
+    for sub in results_directory.iterdir():
+        if not sub.is_dir():
+            continue
+        m = pattern.fullmatch(sub.name)
+        if m is None:
+            continue
+
+        # Parse hyper-params from folder name
+        thresh = float(m.group("thresh"))
+        window = int(m.group("win"))
+
+        metrics_file = sub / "metrics.json"
+        if not metrics_file.exists():
+            print(f"⚠️  No metrics.json in {sub}")
+            continue
+
+        with metrics_file.open() as f:
+            data = json.load(f)
+
+        rows.append({"thresh": thresh, "window": window, **data})
+
+    if not rows:
+        raise RuntimeError(f"No matching result folders found under {results_directory}")
+
+    df = pd.DataFrame(rows)
+
+    # --------------------------- 2. Plot each metric --------------------------
+    for metric in metrics:
+        if metric not in df.columns:
+            print(f"⚠️  Metric '{metric}' not found in any metrics.json – skipping")
+            continue
+
+        # Pivot → thresholds as rows, windows as cols
+        grid = df.pivot_table(index="thresh", columns="window", values=metric)
+        grid = grid.sort_index()
+        grid = grid.reindex(sorted(grid.columns), axis=1)
+
+        # Matplotlib heat-map (no seaborn – per project rules)
+        fig, ax = plt.subplots()
+        im = ax.imshow(grid.values)  # uses default colormap (viridis)
+
+        # Pretty ticks / labels
+        ax.set_xticks(range(len(grid.columns)))
+        ax.set_xticklabels(grid.columns)
+        ax.set_xlabel("Window size (s)")
+
+        ax.set_yticks(range(len(grid.index)))
+        ax.set_yticklabels(grid.index)
+        ax.set_ylabel("Apnea prob. threshold")
+
+        ax.set_title(metric.upper())
+        fig.colorbar(im, ax=ax)
+
+        plt.tight_layout()
+
+        if save_figures:
+            out = results_directory / f"{metric}_grid.png"
+            fig.savefig(out, dpi=dpi, bbox_inches="tight")
+            print(f"Saved → {out}")
+
+        plt.show()
+
+
+if __name__ == "__main__":
+    plot_grid_search_results(config.path.apnea_model_directory,
+                             metrics=("f1", "mcc"),
+                             save_figures=True)
