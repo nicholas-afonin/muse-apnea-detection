@@ -39,6 +39,7 @@ class path:
 
         dataset_statistics = r"C:\Users\aweso\Desktop\Sunnybrook\MUSE\Data\dataset_statistics/"
         apnea_model_directory = r"C:\Users\aweso\Desktop\Sunnybrook\MUSE\Data\apnea_model/"
+        arousal_model_directory = r"C:\Users\aweso\Desktop\Sunnybrook\MUSE\Data\arousal_model/"
 
     else:
         raw_csv_directory = "/scratch/a/alim/afoninni/muse/MUSE-PSG/"
@@ -50,3 +51,4 @@ class path:
 
         dataset_statistics = "/scratch/a/alim/afoninni/muse/dataset_statistics/"
         apnea_model_directory = "/scratch/a/alim/afoninni/muse/models/apnea/"
+        arousal_model_directory = "/scratch/a/alim/afoninni/muse/models/arousal/"

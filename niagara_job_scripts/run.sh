@@ -4,8 +4,8 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=40
-#SBATCH --output=/scratch/a/alim/afoninni/muse/grid_search_model.out
-#SBATCH --error=/scratch/a/alim/afoninni/muse/grid_search_model.err
+#SBATCH --output=/scratch/a/alim/afoninni/muse/grid_search_arousal.out
+#SBATCH --error=/scratch/a/alim/afoninni/muse/grid_search_arousal.err
 
 
 source /home/a/alim/afoninni/.virtualenvs/env3/bin/activate
@@ -16,4 +16,4 @@ export MPLCONFIGDIR=/scratch/a/alim/afoninni/tmp  # also a small fix (this one i
 
 export PYTHONPATH=..  # Set the working path directory to the project root so files like config can be accessed.
 
-python apnea_binary_classifier.py
+python arousal_binary_classifier.py
