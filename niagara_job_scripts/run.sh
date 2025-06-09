@@ -4,12 +4,12 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=40
-#SBATCH --output=/scratch/a/alim/afoninni/muse/test_grid.out
-#SBATCH --error=/scratch/a/alim/afoninni/muse/test_grid.err
+#SBATCH --output=/scratch/a/alim/afoninni/muse/grid_search_model.out
+#SBATCH --error=/scratch/a/alim/afoninni/muse/grid_search_model.err
 
 
 source /home/a/alim/afoninni/.virtualenvs/env3/bin/activate
-cd /home/a/alim/afoninni/muse-apnea-detection/diagnostics || exit
+cd /home/a/alim/afoninni/muse-apnea-detection/deep_learning || exit
 
 export NUMBA_CACHE_DIR=/scratch/a/alim/afoninni/tmp  # fixes an error caused by a sub-dependency (numba)
 export MPLCONFIGDIR=/scratch/a/alim/afoninni/tmp  # also a small fix (this one is not required)
