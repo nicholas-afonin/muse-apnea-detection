@@ -16,4 +16,4 @@ export MPLCONFIGDIR=/scratch/a/alim/afoninni/tmp  # also a small fix (this one i
 
 export PYTHONPATH=..  # Set the working path directory to the project root so files like config can be accessed.
 
-python evaluation_helper.py
+python apnea_binary_classifier.py
