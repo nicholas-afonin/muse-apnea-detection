@@ -116,7 +116,7 @@ def train_model(X_train, y_train, X_val, y_val, save_as: str):
     basic_model.compile(loss='binary_crossentropy', optimizer=adam)
 
     # Add early stopping to prevent wasting time without validation improvements
-    early_stop = EarlyStopping(monitor='val_loss', patience=30, restore_best_weights=True)
+    early_stop = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
 
     # Tell the loss function to weigh the minority cases much more heavily
     weights = class_weight.compute_class_weight(
@@ -129,7 +129,7 @@ def train_model(X_train, y_train, X_val, y_val, save_as: str):
     # Train model
     history = basic_model.fit(
         X_train, y_train,
-        epochs=2,
+        epochs=100,
         validation_data=(X_val, y_val),
         verbose=1,
         callbacks=[early_stop],
