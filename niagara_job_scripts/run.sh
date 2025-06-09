@@ -1,19 +1,19 @@
 #!/bin/bash
-#SBATCH --job-name=muse_model_training
-#SBATCH --time=24:00:00
+#SBATCH --job-name=grid_
+#SBATCH --time=1:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=40
-#SBATCH --output=/scratch/a/alim/afoninni/muse/grid_search_arousal.out
-#SBATCH --error=/scratch/a/alim/afoninni/muse/grid_search_arousal.err
+#SBATCH --output=/scratch/a/alim/afoninni/muse/grid_search_evaluation.out
+#SBATCH --error=/scratch/a/alim/afoninni/muse/grid_search_evaluation.err
 
 
 source /home/a/alim/afoninni/.virtualenvs/env3/bin/activate
-cd /home/a/alim/afoninni/muse-apnea-detection/deep_learning || exit
+cd /home/a/alim/afoninni/muse-apnea-detection/diagnostics || exit
 
 export NUMBA_CACHE_DIR=/scratch/a/alim/afoninni/tmp  # fixes an error caused by a sub-dependency (numba)
 export MPLCONFIGDIR=/scratch/a/alim/afoninni/tmp  # also a small fix (this one is not required)
 
 export PYTHONPATH=..  # Set the working path directory to the project root so files like config can be accessed.
 
-python arousal_binary_classifier.py
+python evaluation_helper.py

@@ -178,3 +178,7 @@ if __name__ == "__main__":
     plot_grid_search_results(config.path.apnea_model_directory,
                              metrics=("f1", "mcc"),
                              save_figures=True)
+
+    plot_grid_search_results(config.path.arousal_model_directory,
+                             metrics=("f1", "mcc"),
+                             save_figures=True)
