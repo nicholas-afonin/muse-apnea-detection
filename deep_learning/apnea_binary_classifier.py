@@ -116,7 +116,7 @@ def train_model(X_train, y_train, X_val, y_val, save_as: str):
     basic_model.compile(loss='binary_crossentropy', optimizer=adam)
 
     # Add early stopping to prevent wasting time without validation improvements
-    early_stop = EarlyStopping(monitor='val_loss', patience=30, restore_best_weights=True)
+    early_stop = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
 
     # Tell the loss function to weigh the minority cases much more heavily
     weights = class_weight.compute_class_weight(
@@ -211,12 +211,13 @@ def simple_training_wrapper(dataset_to_train_on):
 if __name__ == "__main__":
 
     # Iterate over all possible datasets and create a list
-    combinations = []
-    for window in [30, 25, 20, 15, 10, 5]:
-        for thresh in [0.25, 0.5, 0.75, 0.95]:
-            simple_training_wrapper((thresh, window))
+    # combinations = []
+    # for window in [30, 25, 20, 15, 10, 5]:
+    #     for thresh in [0.25, 0.5, 0.75, 0.95]:
+    #         simple_training_wrapper((thresh, window))
 
-    # simple_training_wrapper((0.5, 30))
+    simple_training_wrapper((0.5, 30))
+
     # Prepare to apply parallel processing so that we don't take forever to run the job
     # simply runs the simple training wrapper on all possible combinations of thresholds and window sizes,
     # but does it in parallel so we don't spend 10 years here.
