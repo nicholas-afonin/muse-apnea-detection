@@ -214,7 +214,7 @@ if __name__ == "__main__":
 
     # Iterate over all possible datasets and create a list
     combinations = []
-    for window in [30, 25, 20, 15, 10, 5]:
+    for window in [10, 5, 1]:
         for thresh in [0.25, 0.5, 0.75, 0.95]:
             simple_training_wrapper((thresh, window))
 
