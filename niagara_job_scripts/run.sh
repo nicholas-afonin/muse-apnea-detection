@@ -4,16 +4,16 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=40
-#SBATCH --output=/scratch/a/alim/afoninni/muse/visualize_search_results.out
-#SBATCH --error=/scratch/a/alim/afoninni/muse/visualize_search_results.err
+#SBATCH --output=/scratch/a/alim/afoninni/muse/finishing_arousal_models.out
+#SBATCH --error=/scratch/a/alim/afoninni/muse/finishing_arousal_models.err
 
 
 source /home/a/alim/afoninni/.virtualenvs/env3/bin/activate
-cd /home/a/alim/afoninni/muse-apnea-detection/diagnostics || exit
+cd /home/a/alim/afoninni/muse-apnea-detection/models || exit
 
 export NUMBA_CACHE_DIR=/scratch/a/alim/afoninni/tmp  # fixes an error caused by a sub-dependency (numba)
 export MPLCONFIGDIR=/scratch/a/alim/afoninni/tmp  # also a small fix (this one is not required)
 
 export PYTHONPATH=..  # Set the working path directory to the project root so files like config can be accessed.
 
-python evaluation_helper.py
+python arousal_binary_classifier.py
