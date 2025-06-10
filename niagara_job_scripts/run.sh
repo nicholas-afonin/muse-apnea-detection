@@ -1,11 +1,11 @@
 #!/bin/bash
 #SBATCH --job-name=grid_
-#SBATCH --time=24:00:00
+#SBATCH --time=2:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=40
-#SBATCH --output=/scratch/a/alim/afoninni/muse/finishing_arousal_models.out
-#SBATCH --error=/scratch/a/alim/afoninni/muse/finishing_arousal_models.err
+#SBATCH --output=/scratch/a/alim/afoninni/muse/finishing_apnea.out
+#SBATCH --error=/scratch/a/alim/afoninni/muse/finishing_apnea.err
 
 
 source /home/a/alim/afoninni/.virtualenvs/env3/bin/activate
@@ -16,4 +16,4 @@ export MPLCONFIGDIR=/scratch/a/alim/afoninni/tmp  # also a small fix (this one i
 
 export PYTHONPATH=..  # Set the working path directory to the project root so files like config can be accessed.
 
-python arousal_binary_classifier.py
+python apnea_base_model.py

@@ -216,7 +216,7 @@ if __name__ == "__main__":
     #     for thresh in [0.25, 0.5, 0.75, 0.95]:
     #         simple_training_wrapper((thresh, window))
 
-    simple_training_wrapper((0.5, 30))
+    simple_training_wrapper((0.01, 30))
 
     # Prepare to apply parallel processing so that we don't take forever to run the job
     # simply runs the simple training wrapper on all possible combinations of thresholds and window sizes,
