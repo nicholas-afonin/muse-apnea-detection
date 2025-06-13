@@ -67,11 +67,11 @@ def load_data(processed_features_directory: str, train_val_test_ratio: (float, f
     test_df = pd.DataFrame(scaler.transform(test_df), columns=test_df.columns)
 
     # Split into X and Y train and test
-    X_train = train_df.drop(columns=['ts', 'apnea_event'])
-    X_test = test_df.drop(columns=['ts', 'apnea_event'])
+    X_train = train_df.drop(columns=['ts', 'arousal_event'])
+    X_test = test_df.drop(columns=['ts', 'arousal_event'])
 
-    y_train = X_train.pop('arousal_event')
-    y_test = X_test.pop('arousal_event')
+    y_train = X_train.pop('apnea_event')
+    y_test = X_test.pop('apnea_event')
 
     # Create stratified train/validation split
     if val_ratio != 0:
@@ -137,24 +137,24 @@ def train_model(X_train, y_train, X_val, y_val, save_as: str):
     )
 
     # Save the model to disk
-    directory = os.path.join(config.path.arousal_model_directory, save_as)  # "apnea_model/save_as/"
+    directory = os.path.join(config.path.apnea_model_directory, save_as)  # "apnea_model/save_as/"
     os.makedirs(directory, exist_ok=True)
     model_save_path = os.path.join(directory, "model.keras")  # "apnea_model/save_as/model.keras"
     basic_model.save(model_save_path)
 
     # Save the history to disk
-    with open(os.path.join(directory, "history.pkl"), "wb") as f:  # "apnea_model/save_as/history.pkl"
+    with open(os.path.join(directory, "history.pkl"), "wb") as f:  # "apnea-model/save_as/history.pkl"
         pickle.dump(history.history, f)
 
 
 def evaluate_model(X, y, load_as: str, relevant_threshold_value, relevant_window_size):
     # Load model and training history
-    model = load_model(os.path.join(config.path.arousal_model_directory, load_as, "model.keras"))  # "apnea_model/load_as/model.keras"
-    with open(os.path.join(config.path.arousal_model_directory, load_as, "history.pkl"), "rb") as f:  # "apnea_model/load_as/history.pkl"
+    model = load_model(os.path.join(config.path.apnea_model_directory, load_as, "model.keras"))  # "apnea_model/load_as/model.keras"
+    with open(os.path.join(config.path.apnea_model_directory, load_as, "history.pkl"), "rb") as f:  # "apnea_model/load_as/history.pkl"
         history = pickle.load(f)
 
     # Set directory to which we'll save everything
-    save_dir = os.path.join(config.path.arousal_model_directory, load_as)
+    save_dir = os.path.join(config.path.apnea_model_directory, load_as)
     os.makedirs(save_dir, exist_ok=True)
 
     # Plot training history
@@ -202,7 +202,7 @@ def main(threshold, window_size, train_val_test_ratio: (float, float, float), mo
 def simple_training_wrapper(dataset_to_train_on):
     threshold = dataset_to_train_on[0]
     window = dataset_to_train_on[1]
-    train_val_test_ratio = (0.70, 0, 0.15)
+    train_val_test_ratio = (0.85, 0, 0.15)
     model_name = f"{threshold}_thresh_{window}s_window"
 
     main(threshold, window, train_val_test_ratio, model_name, evaluate_only=False)
@@ -210,21 +210,10 @@ def simple_training_wrapper(dataset_to_train_on):
 
 if __name__ == "__main__":
 
-    # simple_training_wrapper((0.5, 30))
-
     # Iterate over all possible datasets and create a list
-    combinations = []
-    for window in [30, 25, 20, 15, 10, 5]:
-        for thresh in [0.01]:
-            simple_training_wrapper((thresh, window))
+    # combinations = []
+    # for window in [30, 25, 20, 15, 10, 5]:
+    #     for thresh in [0.25, 0.5, 0.75, 0.95]:
+    #         simple_training_wrapper((thresh, window))
 
-    # simple_training_wrapper((0.5, 30))
-
-    # Prepare to apply parallel processing so that we don't take forever to run the job
-    # simply runs the simple training wrapper on all possible combinations of thresholds and window sizes,
-    # but does it in parallel so we don't spend 10 years here.
-    # cpus = int(os.environ.get('SLURM_CPUS_PER_TASK', default=1))
-    # pool = mp.Pool(processes=cpus)
-    # data = pool.map(simple_training_wrapper, combinations)
-    # pool.close()
-    # pool.join()
+    simple_training_wrapper((0.01, 30))

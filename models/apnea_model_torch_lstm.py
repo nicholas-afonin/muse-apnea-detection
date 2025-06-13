@@ -1,0 +1,327 @@
+import os, glob, random, json, pickle
+
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.utils import class_weight
+from sklearn.metrics import (
+    roc_auc_score, matthews_corrcoef,
+    f1_score, precision_score, recall_score
+)
+
+import torch
+import torch.nn as nn
+from torch.utils.data import Dataset, DataLoader, TensorDataset
+import pytorch_lightning as pl
+from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
+from pytorch_lightning.loggers import CSVLogger
+
+import config                                     # unchanged
+from diagnostics.evaluation_helper import *
+
+torch.set_float32_matmul_precision('medium')
+
+
+""" -------------------------------------- HELPER FUNCS -------------------------------------- """
+
+
+def combine_files_into_df(csv_path_list):
+    """Take a list of paths to csv files and convert them all into one big dataframe"""
+    dfs = [pd.read_csv(f) for f in csv_path_list]
+    combined = pd.concat(dfs, ignore_index=True)
+
+    return combined
+
+
+""" -------------------------------------- DATA LOADING -------------------------------------- """
+
+
+def load_data(processed_features_directory: str, train_val_test_ratio: (float, float, float)):
+    all_csv_file_paths = glob.glob(processed_features_directory + "*.csv")
+
+    # Break down into data proportions
+    train_ratio, val_ratio, test_ratio = train_val_test_ratio
+
+    # Shuffle the list (for randomness, but reproducible with a seed)
+    random.seed(21)
+    random.shuffle(all_csv_file_paths)
+
+    # Split into train and test
+    split_index = int(len(all_csv_file_paths) * train_ratio)
+    train_files = all_csv_file_paths[:split_index]
+    test_files = all_csv_file_paths[split_index:]
+
+    train_df = combine_files_into_df(train_files)
+    test_df = combine_files_into_df(test_files)
+
+    # Remove all rows with NaNs
+    train_df.dropna(inplace=True)
+    test_df.dropna(inplace=True)
+
+    # Scale all data to be from 0 to 1
+    scaler = MinMaxScaler()
+    scaler.fit(train_df)
+    train_df = pd.DataFrame(scaler.transform(train_df), columns=train_df.columns)
+    test_df = pd.DataFrame(scaler.transform(test_df), columns=test_df.columns)
+
+    # Split into X and Y train and test
+    X_train = train_df.drop(columns=['ts', 'arousal_event'])
+    X_test = test_df.drop(columns=['ts', 'arousal_event'])
+
+    y_train = X_train.pop('apnea_event')
+    y_test = X_test.pop('apnea_event')
+
+    # Create stratified train/validation split
+    if val_ratio != 0:
+        X_train, X_val, y_train, y_val = train_test_split(
+            X_train, y_train,
+            test_size=val_ratio/train_ratio,
+            stratify=y_train,
+            random_state=43
+        )
+    else:
+        # IF VALIDATION DATA IS SET UP AS EQUAL TO TEST, BE CAREFUL
+        X_val = X_test
+        y_val = y_test
+
+    return X_train, X_val, X_test, y_train, y_val, y_test
+
+""" -------------------------------------- MODEL ARCHITECTURE --------------------------------------"""
+
+class ApneaLSTM(pl.LightningModule):
+    def __init__(self,
+                 feature_dim: int = 168,
+                 hidden_size: int = 64,
+                 num_layers: int = 1,
+                 lr: float = 1e-4,
+                 pos_weight: float = 1.0):
+        super().__init__()
+        self.save_hyperparameters()
+
+        # Define LSTM architecture
+        self.lstm = nn.LSTM(
+            input_size=feature_dim,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            batch_first=True,
+            bidirectional=False
+        )
+
+        # Define underlying neural network
+        self.head = nn.Sequential(
+            nn.Linear(hidden_size, 64), nn.ReLU(), nn.Dropout(0.3),
+            nn.Linear(64, 1)
+        )
+
+        # Define loss function
+        self.loss_fn = nn.BCEWithLogitsLoss(
+            pos_weight=torch.tensor(pos_weight))
+
+    def forward(self, x):              # x: (B, T, F)
+        # out, (h_n, _) = self.lstm(x)   # h_n: (num_layers, B, H)
+        # h_last = h_n[-1]               # (B, H) – last layer’s final hidden
+        # return self.head(h_last).squeeze(1)  # (B,)
+
+        # out, (h_n, _) = self.lstm(x)   # h_n: (num_layers, B, H)
+        # center = out[:,3//2,:]               # center output
+        # return self.head(center).squeeze(1)
+
+        out, _ = self.lstm(x)  # (B, T, H)
+        h_avg = out.mean(dim=1)  # (B, H)
+        return self.head(h_avg).squeeze(1)
+
+
+    def training_step(self, batch, _):
+        x, y = batch
+        loss = self.loss_fn(self(x), y.float())
+        self.log("train_loss", loss, prog_bar=True)
+        return loss
+
+    def validation_step(self, batch, _):
+        x, y = batch
+        loss = self.loss_fn(self(x), y.float())
+        self.log("val_loss", loss, prog_bar=True)
+
+    def configure_optimizers(self):
+        decay = 0.01
+        return torch.optim.AdamW(self.parameters(),
+                                lr=self.hparams.lr,
+                                weight_decay=decay)
+
+""" -------------------------------------- TRAINING --------------------------------------"""
+
+def _to_loader(X: pd.DataFrame, y: pd.Series, batch: int, shuffle=False, persistent_workers=False, pin_memory=False):
+    ds = SequenceDataset(X, y, seq_len=SEQ_LENGTH)    # swapped in
+    return DataLoader(ds, batch_size=batch, shuffle=shuffle, num_workers=4, persistent_workers=persistent_workers,
+                      pin_memory=pin_memory)
+
+
+class SequenceDataset(Dataset):
+    """LSTM-Compatible Dataset loader for sequence data. When iterated through,
+    it will return chunks of (B, T, F) instead of (B, T) where B is the batch size,
+    F is sequence length, T is number of features going in.
+
+    Note batching is handled later so this class only needs to return (T, F) when called
+    """
+    def __init__(self, X_df: pd.DataFrame, y_series: pd.Series,
+                 seq_len: int = 3):
+
+        # Initialize the entire
+        self.X = torch.tensor(X_df.values, dtype=torch.float32)
+        self.y = torch.tensor(y_series.values, dtype=torch.long)
+        self.seq_len = seq_len
+
+        # Pre-compute valid starting indices so we don’t slide off the end
+        self.starts = range(0, len(self.X) - seq_len + 1)
+
+    def __len__(self):
+        return len(self.starts)
+
+    def __getitem__(self, idx):
+        """
+        Fetches the sequence of features and corresponding label for a given index.
+
+        :param idx: Index for the sample to retrieve.
+        :type idx: int
+        :return: A tuple containing the sequence of features (`x_seq`) and the
+            corresponding label (`y_lbl`) for the central window in the sequence
+        :rtype: Tuple[np.ndarray, Any]
+        """
+        s = self.starts[idx]
+        e = s + self.seq_len
+        x_seq = self.X[s:e]          # slice F windows
+
+        # label = centre window
+        y_lbl = self.y[s + self.seq_len // 2]
+
+        return x_seq, y_lbl
+
+
+def train_model(X_train, y_train, X_val, y_val, save_as: str):
+    # class-imbalance weighting → BCEWithLogits(pos_weight)
+    weights = class_weight.compute_class_weight('balanced',
+                                                classes=np.unique(y_train),
+                                                y=y_train)
+    pos_w = torch.tensor(weights[1], dtype=torch.float32)
+
+    # Initialize model and shit.
+    model = ApneaLSTM(pos_weight=pos_w)
+
+    root_dir = os.path.join(config.path.apnea_lstm_model_directory, save_as)
+    model_specific_dir = os.path.join(config.path.apnea_lstm_model_directory, save_as, "lightning_logs", f"version_{VERSION}")
+    logger = CSVLogger(root_dir, name="lightning_logs", flush_logs_every_n_steps=1)
+    ckpt = ModelCheckpoint(dirpath=model_specific_dir,
+                           filename="best",
+                           save_top_k=1,
+                           monitor="val_loss",
+                           mode="min")
+    early = EarlyStopping(monitor="val_loss", patience=10, mode="min")
+
+    trainer = pl.Trainer(
+        max_epochs=100,
+        accelerator="auto", devices="auto",
+        logger=logger,
+        log_every_n_steps=10,
+        callbacks=[ckpt, early],
+        default_root_dir=root_dir,
+        enable_progress_bar=True,
+        enable_model_summary=True,
+        check_val_every_n_epoch=1,
+        gradient_clip_val=0.5,
+    )
+
+    trainer.fit(
+        model,
+        _to_loader(X_train, y_train, 256, shuffle=True, persistent_workers=True),
+        _to_loader(X_val,   y_val,   256, shuffle=False, persistent_workers=True, pin_memory=True)
+    )
+
+
+""" -------------------------------------- EVALUATION --------------------------------------"""
+
+@torch.no_grad()
+def evaluate_model(X, y, load_as: str,
+                   relevant_threshold_value, relevant_window_size, version):
+
+    # Load the model
+    root_dir = os.path.join(config.path.apnea_lstm_model_directory, load_as, "lightning_logs", f"version_{version}")
+
+
+    ckpt_path = os.path.join(root_dir, "best.ckpt")
+    model = ApneaLSTM.load_from_checkpoint(ckpt_path).eval().to("cpu")
+
+    # -----------------------------------------------------------------------
+    seq_len = SEQ_LENGTH
+    batch_size = 256  # whatever fits in VRAM/CPU-RAM
+    device = "cpu"  # or "cuda:0"
+
+    test_ds = SequenceDataset(X, y, seq_len=seq_len)
+    test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False)
+
+    model.eval().to(device)
+
+    logits_list, labels_list = [], []
+
+    with torch.no_grad():  # turn off autograd
+        for xb, yb in test_loader:  # DataLoader handles batching
+            xb = xb.to(device, dtype=torch.float32)  # (B, T, F)
+            yb = yb.to(device)
+            out = model(xb)  # (B,)
+            logits_list.append(out.cpu())
+            labels_list.append(yb.cpu())
+
+    logits = torch.cat(logits_list).numpy()  # shape (N,)
+    actual = torch.cat(labels_list).numpy()  # shape (N,)
+
+    probs = 1 / (1 + np.exp(-logits))
+    preds = (probs >= 0.5).astype(int)
+
+    # -----------------------------------------------------------------------
+
+    title = f"{relevant_window_size} Window, {relevant_threshold_value} Threshold"
+    plot_confusion_matrix(actual, preds, title, root_dir)
+
+    metrics = {
+        "roc_auc":  float(roc_auc_score(actual, probs)),
+        "mcc":      float(matthews_corrcoef(actual, preds)),
+        "f1":       float(f1_score(actual, preds)),
+        "precision":float(precision_score(actual, preds)),
+        "recall":   float(recall_score(actual, preds))
+    }
+    json.dump(metrics, open(os.path.join(root_dir, "metrics.json"), "w"), indent=2)
+
+
+""" -------------------------------------- INTERFACE --------------------------------------"""
+
+
+def main(threshold, window_size, train_val_test_ratio: (float, float, float), model_name, version, evaluate_only=False, ):
+    # Load data in appropriate proportions (randomize and split by files)
+    full_data_path = os.path.join(config.path.EEG_ACC_features_labelled,
+                                  f'EEG_ACC_features_labelled_ApneaThreshold{threshold}_ArousalThreshold{threshold}_window{window_size}/')
+    X_train, X_val, X_test, y_train, y_val, y_test = load_data(full_data_path, train_val_test_ratio)
+
+    # Train the model
+    if not evaluate_only:
+        train_model(X_train, y_train, X_val, y_val, save_as=model_name)
+
+    # Evaluate the model
+    evaluate_model(X_test, y_test, load_as=model_name, relevant_threshold_value=threshold,
+                   relevant_window_size=window_size, version=version)
+
+
+def simple_wrapper(threshold, window):
+    train_val_test_ratio = (0.70, 0.15, 0.15)
+    model_name = f"{threshold}_thresh_{window}s_window"
+
+    main(threshold, window, train_val_test_ratio, model_name, VERSION, evaluate_only=False)
+
+
+if __name__ == "__main__":
+    VERSION = 0  # NOTE WHOLE VERSION THING IS BROKEN STILL - NEED TO FIGURE OUT WHAT TO DO ABOUT THAT
+    SEQ_LENGTH = 3
+
+    for window in [5, 10, 15, 20, 25, 30]:
+        for thresh in [0.01, 0.25, 0.5, 0.75, 0.95]:
+            try: simple_wrapper(thresh, window)
+            except Exception as e: print(f"------------ERROR: {thresh} {window}, error: {e}")

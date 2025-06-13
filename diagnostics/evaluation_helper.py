@@ -10,6 +10,7 @@ from pathlib import Path
 import pandas as pd
 
 
+
 def plot_training_history(history, save_dir):
     # Plot training & validation loss
     plt.plot(history['loss'], label='Training Loss')
@@ -84,6 +85,8 @@ def plot_grid_search_results(
         metrics: tuple[str, ...] = ("f1",),
         save_figures: bool = False,
         dpi: int = 200,
+        vmin: float | None = None,
+        vmax: float | None = None,
 ):
     """
     Crawl a directory laid out like
@@ -150,7 +153,85 @@ def plot_grid_search_results(
 
         # Matplotlib heat-map (no seaborn – per project rules)
         fig, ax = plt.subplots()
-        im = ax.imshow(grid.values)  # uses default colormap (viridis)
+        im = ax.imshow(grid.values, vmin=vmin, vmax=vmax)  # uses default colormap (viridis)
+
+        # Pretty ticks / labels
+        ax.set_xticks(range(len(grid.columns)))
+        ax.set_xticklabels(grid.columns)
+        ax.set_xlabel("Window size (s)")
+
+        ax.set_yticks(range(len(grid.index)))
+        ax.set_yticklabels(grid.index)
+        ax.set_ylabel("Apnea prob. threshold")
+
+        ax.set_title(metric.upper())
+        fig.colorbar(im, ax=ax)
+
+        plt.tight_layout()
+
+        if save_figures:
+            out = results_directory / f"{metric}_grid.png"
+            fig.savefig(out, dpi=dpi, bbox_inches="tight")
+            print(f"Saved → {out}")
+
+        plt.show()
+
+
+def plot_grid_search_results_temp_cooked(
+        results_directory: str | Path,
+        metrics: tuple[str, ...] = ("f1",),
+        save_figures: bool = False,
+        dpi: int = 200,
+        vmin: float | None = None,
+        vmax: float | None = None,
+):
+    """TEMPORARY FUNCTION FOR A VERY SPECIFIC PURPOSE"""
+
+    results_directory = Path(results_directory).expanduser().resolve()
+    pattern = re.compile(r"(?P<thresh>[0-9.]+)_thresh_(?P<win>\d+)s_window")
+
+    # --------------------------- 1. Load all metrics --------------------------
+    rows = []
+    for sub in results_directory.iterdir():
+        if not sub.is_dir():
+            continue
+        m = pattern.fullmatch(sub.name)
+        if m is None:
+            continue
+
+        # Parse hyper-params from folder name
+        thresh = float(m.group("thresh"))
+        window = int(m.group("win"))
+
+        metrics_file = sub / "lightning_logs/version_0/metrics.json"
+        if not metrics_file.exists():
+            print(f"⚠️  No metrics.json in {sub}")
+            continue
+
+        with metrics_file.open() as f:
+            data = json.load(f)
+
+        rows.append({"thresh": thresh, "window": window, **data})
+
+    if not rows:
+        raise RuntimeError(f"No matching result folders found under {results_directory}")
+
+    df = pd.DataFrame(rows)
+
+    # --------------------------- 2. Plot each metric --------------------------
+    for metric in metrics:
+        if metric not in df.columns:
+            print(f"⚠️  Metric '{metric}' not found in any metrics.json – skipping")
+            continue
+
+        # Pivot → thresholds as rows, windows as cols
+        grid = df.pivot_table(index="thresh", columns="window", values=metric)
+        grid = grid.sort_index()
+        grid = grid.reindex(sorted(grid.columns), axis=1)
+
+        # Matplotlib heat-map (no seaborn – per project rules)
+        fig, ax = plt.subplots()
+        im = ax.imshow(grid.values, vmin=vmin, vmax=vmax)
 
         # Pretty ticks / labels
         ax.set_xticks(range(len(grid.columns)))
@@ -176,9 +257,7 @@ def plot_grid_search_results(
 
 if __name__ == "__main__":
     plot_grid_search_results(config.path.apnea_model_directory,
-                             metrics=("f1", "mcc"),
-                             save_figures=True)
-
-    plot_grid_search_results(config.path.arousal_model_directory,
-                             metrics=("f1", "mcc"),
-                             save_figures=True)
+                             metrics=("mcc",),
+                             save_figures=True,
+                             vmin=0.0,
+                             vmax=0.30)

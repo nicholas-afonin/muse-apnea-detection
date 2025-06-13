@@ -35,10 +35,11 @@ class path:
         ACC_features_directory = r"C:\Users\aweso\Desktop\Sunnybrook\MUSE\Data\ACC_features/"
         EEG_features_directory = r"C:\Users\aweso\Desktop\Sunnybrook\MUSE\Data\EEG_features/"
         EEG_ACC_features = r"C:\Users\aweso\Desktop\Sunnybrook\MUSE\Data\EEG_ACC_features_June2025/"
-        EEG_ACC_features_labelled = r"C:\Users\aweso\Desktop\Sunnybrook\MUSE\Data\EEG_ACC_features_labelled/"
+        EEG_ACC_features_labelled = r"C:\Users\aweso\Desktop\Sunnybrook\MUSE\Data\EEG_ACC_features_labelled_June2025/"
 
         dataset_statistics = r"C:\Users\aweso\Desktop\Sunnybrook\MUSE\Data\dataset_statistics/"
         apnea_model_directory = r"C:\Users\aweso\Desktop\Sunnybrook\MUSE\Data\apnea_model/"
+        apnea_lstm_model_directory = r"C:\Users\aweso\Desktop\Sunnybrook\MUSE\Data\apnea_model_lstm/"
         arousal_model_directory = r"C:\Users\aweso\Desktop\Sunnybrook\MUSE\Data\arousal_model/"
 
     else:
@@ -51,4 +52,5 @@ class path:
 
         dataset_statistics = "/scratch/a/alim/afoninni/muse/dataset_statistics/"
         apnea_model_directory = "/scratch/a/alim/afoninni/muse/models/apnea/"
+        apnea_lstm_model_directory = "/scratch/a/alim/afoninni/muse/models/apnea_lstm/"
         arousal_model_directory = "/scratch/a/alim/afoninni/muse/models/arousal/"
